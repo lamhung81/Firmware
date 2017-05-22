@@ -1,0 +1,19 @@
+#!nsh
+#
+# @name Passthrough mode for auvbluerov
+#
+# @type custom
+#
+# @board px4fmu-v1 exclude
+# @board px4fmu-v2 exclude
+# @board px4fmu-v3 exclude
+# @board px4fmu-v4pro exclude
+# @board px4fmu-v5 exclude
+# @board aerofc-v1 exclude
+#
+# @maintainer Lam-Hung NGUYEN <lamhung81@gmail.com>
+#
+# This startup can be used on Pixhawk for the
+# passthrough of RC input and PWM output.
+
+set VEHICLE_TYPE passthrough
