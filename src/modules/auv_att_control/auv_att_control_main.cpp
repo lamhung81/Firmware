@@ -261,7 +261,13 @@ float AUVAttitudeControl::joystick_deadband(float joystick_value, float joystick
 {
 	if ((float)fabs((double)joystick_value) < joystick_threshold){
 		joystick_value = 0.0;
-	} 
+	} else if (joystick_value > joystick_threshold){
+                joystick_value = (joystick_value - joystick_threshold) / ((float)1.0 - joystick_threshold);
+        } else
+        {
+                joystick_value = -(-joystick_value - joystick_threshold) / ((float)1.0 - joystick_threshold);
+        }
+
 	return joystick_value;
 }
 
@@ -314,7 +320,7 @@ AUVAttitudeControl::start()
 
 		// timed out - periodic check for _task_should_exit 
                 //lhnguyen debug: use the if following code block leads to the reaction of motors 
-                //only when there are vehicle_rates_setpoint
+                //only when there are new messages from vehicle_rates_setpoint
 		/*
                 if (poll_ret == 0) {
 			pwm_value = 1500; //Disarm pwm of BlueESC
