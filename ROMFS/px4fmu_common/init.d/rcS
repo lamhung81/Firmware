@@ -1074,8 +1074,13 @@ then
 			fmu mode_pwm4
 		fi
 
-		pwm failsafe -c 1234 -p 900
-		pwm disarmed -c 1234 -p 900
+		# For debug_lhnguyen
+		#pwm failsafe -c 1234 -p 900
+		#pwm disarmed -c 1234 -p 900
+
+		#debug_lhnguyen: according to BlueESC
+		pwm failsafe -c 1234 -p 1500
+		pwm disarmed -c 1234 -p 1500
 
 		# Arm straightaway.
 		pwm arm
