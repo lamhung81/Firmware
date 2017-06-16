@@ -68,7 +68,7 @@ set(config_module_list
 	systemcmds/param
 	systemcmds/perf
 	systemcmds/pwm
-        systemcmds/pwmhung #lhnguyen: added for debugging
+        #systemcmds/pwmhung #lhnguyen: added for debugging
 	systemcmds/reboot
 	#systemcmds/sd_bench
 	systemcmds/top
@@ -173,7 +173,7 @@ set(config_module_list
 	#examples/math_demo
 	# Tutorial code from
 	# https://px4.io/dev/px4_simple_app
-	# examples/px4_simple_app
+	#examples/px4_simple_app
 
 	# Tutorial code from
 	# https://px4.io/dev/daemon
@@ -188,7 +188,7 @@ set(config_module_list
 	#examples/fixedwing_control
 
 	# Hardware test
-	examples/hwtest
+	#examples/hwtest
 )
 
 set(config_extra_builtin_cmds
