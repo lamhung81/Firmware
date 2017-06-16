@@ -89,7 +89,8 @@ __BEGIN_DECLS
 /**
  * Default value for a shutdown motor
  */
-#define PWM_MOTOR_OFF	900
+//#define PWM_MOTOR_OFF	900 // debug_lhnguyen
+#define PWM_MOTOR_OFF	1500 // debug_lhnguyen: Acording to BlueESC
 
 /**
  * Default minimum PWM in us
