@@ -184,8 +184,14 @@ public:
 	 * @return		OK on success.
 	 */
 	int		start();
-
+	
 private:
+	//int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value;
+
+
+
+	float 		joystick_deadband(float value, float threshold);
+
 
 
 };
@@ -194,7 +200,7 @@ private:
 namespace auv_att_control
 {
 
-AUVAttitudeControl	*g_control;
+	AUVAttitudeControl	*g_control;
 }
 
 
@@ -202,13 +208,15 @@ AUVAttitudeControl	*g_control;
 AUVAttitudeControl::AUVAttitudeControl()
 {
 
-	}
+}
+
 AUVAttitudeControl::~AUVAttitudeControl()
 {
 	//debug lhnguyen: can phai viet destructor, for deleting memory
+	delete auv_att_control::g_control;
 	auv_att_control::g_control = nullptr;
 
-	}
+}
 
 
 
@@ -246,6 +254,16 @@ AUVAttitudeControl::~AUVAttitudeControl()
 //nsh: mc_att_control: command not found
 //
 
+/* Function for create a deadband for joytick
+theshold is a positive number
+*/	
+float AUVAttitudeControl::joystick_deadband(float joystick_value, float joystick_threshold)
+{
+	if ((float)fabs((double)joystick_value) < joystick_threshold){
+		joystick_value = 0.0;
+	} 
+	return joystick_value;
+}
 
 int
 AUVAttitudeControl::start()
@@ -259,11 +277,17 @@ AUVAttitudeControl::start()
 	fds.fd = vehicle_rates_setpoint_sub_fd;
 
 
-#if 0
+	//bool updated;
+	//orb_check(_v_rates_sp_sub, &updated);
+
+	//if (updated) {
+	//	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+	//}
 
 
-orb_set_interval(vehicle_rates_setpoint_sub_fd, 200);
-#endif
+        #if 0  //Debug
+        orb_set_interval(vehicle_rates_setpoint_sub_fd, 200);
+        #endif
 
 
 	const char *dev= PWM_OUTPUT0_DEVICE_PATH;
@@ -273,22 +297,34 @@ orb_set_interval(vehicle_rates_setpoint_sub_fd, 200);
 	if (fd < 0) {
 			PX4_ERR("can't open %s", dev);
 			return 1;
-		}
+	}
 
 	int ret;
 	int pwm_value;
 	pwm_value = 1400;
+	int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value ;
+	roll_pwm_value = pitch_pwm_value = yaw_pwm_value = thrust_pwm_value = 1500;
 
 	while (1) {
 	
 		/* wait for sensor update of 1 file descriptor for 10 ms (0.01 second) */
 		int poll_ret = px4_poll(&fds, 1, 10);
-		(void)poll_ret;
+		
+                (void) poll_ret;  
 
 		// timed out - periodic check for _task_should_exit 
-		// if (poll_ret == 0) {
-		// 	continue;
-		// }
+                //lhnguyen debug: use the if following code block leads to the reaction of motors 
+                //only when there are vehicle_rates_setpoint
+		/*
+                if (poll_ret == 0) {
+			pwm_value = 1500; //Disarm pwm of BlueESC
+                        px4_ioctl(fd, PWM_SERVO_SET(0), pwm_value);
+                        px4_ioctl(fd, PWM_SERVO_SET(1), pwm_value);
+                        px4_ioctl(fd, PWM_SERVO_SET(2), pwm_value);
+                        px4_ioctl(fd, PWM_SERVO_SET(3), pwm_value);
+                        continue;
+		}
+                */
 
                 if (fds.revents & POLLIN) {
                 /* obtained data for the first file descriptor */
@@ -296,41 +332,73 @@ orb_set_interval(vehicle_rates_setpoint_sub_fd, 200);
 			memset(&raw, 0, sizeof(raw));
 			//copy sensors raw data into local buffer
 			orb_copy(ORB_ID(vehicle_rates_setpoint), vehicle_rates_setpoint_sub_fd, &raw);
-			PX4_INFO("Debug AUV:\t% 1.6f\t %1.6f\t %1.6f\t% 1.6f",
+			
+
+			//Apply joystick deadband, joystick_deadband = 0.1
+   		 	raw.roll  = joystick_deadband(raw.roll,0.1);
+   			raw.pitch = joystick_deadband(raw.pitch,0.1);
+   			raw.yaw   = joystick_deadband(raw.yaw,0.1);
+   			raw.thrust= joystick_deadband(raw.thrust,0.1);
+
+   			PX4_INFO("Debug AUV:\t% 1.6f\t %1.6f\t %1.6f\t% 1.6f",
 								 (double)raw.roll,
 								 (double)raw.pitch,
 								 (double)raw.yaw,
 								 (double)raw.thrust);
+
+   			
+   			//Convert joystick signals to pwm values, 
+   			//Neutral value =1500, according to T200 Bluerobotics motor characteristic
+   			//Take 1500 +/- 50 for giving small pwm value range
+   			roll_pwm_value = 1500 + (int)(50*raw.roll);
+   			pitch_pwm_value = 1500 + (int)(50*raw.pitch);
+   			yaw_pwm_value = 1500 + (int)(50*raw.yaw);
+   			thrust_pwm_value = 1500 + (int)(50*raw.thrust); 
+
    		 }
 
-			//for (unsigned i = 0; i < 8; i++) {
-		       { int i; i = 0;
-		       {
-			//		PX4_INFO("PWM_VALUE  %5d", pwm_value);
-		    		ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value);
+                for (unsigned i = 0; i < 4; i++) {                                     
+                        switch (i) {
+                                case 0:
+                                        pwm_value = roll_pwm_value;
+                                        break;
+                                case 1:
+                                        pwm_value = pitch_pwm_value;
+                                        break;
+                                case 2:
+                                        pwm_value = yaw_pwm_value;
+                                        break;  
+                                case 3:
+                                        pwm_value = thrust_pwm_value;
+                                        break;  
+                                default:
+                                        pwm_value = 1500;
+                                        break;
+                                }
+                        
+                                // PX4_INFO("PWM_VALUE  %5d", pwm_value);
+                                //ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value);
+                                ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value);       
 
-					if (ret != OK) {
-						PX4_ERR("PWM_SERVO_SET(%d)", i);
-						return 1;
-					}
-				}
-		       pwm_value +=1;
-		       if (pwm_value >= 1600) {
-		    	   pwm_value = 1400;
-		       }
-			}
+                                if (ret != OK) {
+                                        PX4_ERR("PWM_SERVO_SET(%d)", i);
+                                        return 1;
+                                }
+                        
+                   
+                        }
 
-				/* Delay longer than the max Oneshot duration */
+                        /* Delay longer than the max Oneshot duration */
+                        //usleep(2542*10); //micro second
 
-			usleep(2542*10); //micro second
+                #ifdef __PX4_NUTTX
+                        /* Trigger all timer's channels in Oneshot mode to fire
+                         * the oneshots with updated values.
+                         */
+                        up_pwm_update();
+                #endif
 
-#ifdef __PX4_NUTTX
-			/* Trigger all timer's channels in Oneshot mode to fire
-			 * the oneshots with updated values.
-			 */
 
-			up_pwm_update();
-#endif
 		}
 }
 
