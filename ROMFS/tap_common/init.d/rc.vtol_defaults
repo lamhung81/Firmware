@@ -39,5 +39,6 @@ then
 fi
 if param compare PWM_DISARMED 0
 then
-	param set PWM_DISARMED 900
+	#param set PWM_DISARMED 900
+	param set PWM_DISARMED 1500 # debug lhnguyen, according to BlueESC
 fi
