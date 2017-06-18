@@ -3468,7 +3468,8 @@ PARAM_DEFINE_INT32(PWM_MAX, 2000);
  * @unit us
  * @group PWM Outputs
  */
-PARAM_DEFINE_INT32(PWM_DISARMED, 900);
+//debug_lhnguyen: according to BlueESC
+PARAM_DEFINE_INT32(PWM_DISARMED, 1500);
 
 /**
  * Set the minimum PWM for the auxiliary outputs
