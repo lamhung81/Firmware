@@ -356,10 +356,10 @@ AUVAttitudeControl::start()
    			//Convert joystick signals to pwm values, 
    			//Neutral value =1500, according to T200 Bluerobotics motor characteristic
    			//Take 1500 +/- 50 for giving small pwm value range
-   			roll_pwm_value = 1500 + (int)(50*raw.roll);
-   			pitch_pwm_value = 1500 + (int)(50*raw.pitch);
-   			yaw_pwm_value = 1500 + (int)(50*raw.yaw);
-   			thrust_pwm_value = 1500 + (int)(50*raw.thrust); 
+   			roll_pwm_value   = 1500 + (int)((float)50.0*raw.roll);
+   			pitch_pwm_value  = 1500 + (int)((float)50.0*raw.pitch);
+   			yaw_pwm_value    = 1500 + (int)((float)50.0*raw.yaw);
+   			thrust_pwm_value = 1500 + (int)((float)50.0*raw.thrust); 
 
    		 }
 
