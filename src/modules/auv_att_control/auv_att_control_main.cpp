@@ -346,12 +346,13 @@ AUVAttitudeControl::start()
    			raw.yaw   = joystick_deadband(raw.yaw,0.1);
    			raw.thrust= joystick_deadband(raw.thrust,0.1);
 
-   			PX4_INFO("Debug AUV:\t% 1.6f\t %1.6f\t %1.6f\t% 1.6f",
+   			/* debug lhnguyen
+                        PX4_INFO("Debug AUV:\t% 1.6f\t %1.6f\t %1.6f\t% 1.6f",
 								 (double)raw.roll,
 								 (double)raw.pitch,
 								 (double)raw.yaw,
 								 (double)raw.thrust);
-
+                        */
    			
    			//Convert joystick signals to pwm values, 
    			//Neutral value =1500, according to T200 Bluerobotics motor characteristic
@@ -360,6 +361,16 @@ AUVAttitudeControl::start()
    			pitch_pwm_value  = 1500 + (int)((float)50.0*raw.pitch);
    			yaw_pwm_value    = 1500 + (int)((float)50.0*raw.yaw);
    			thrust_pwm_value = 1500 + (int)((float)50.0*raw.thrust); 
+
+                        /* debug lhnguyen pwm output to motors
+                        PX4_INFO("Debug AUV:\t% 6d\t %6d\t %6d\t% 6d",
+                                                                 roll_pwm_value,
+                                                                 pitch_pwm_value,
+                                                                 yaw_pwm_value,
+                                                                 thrust_pwm_value);
+                        */
+
+
 
    		 }
 
