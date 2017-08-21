@@ -192,7 +192,13 @@ private:
 
 	float 		joystick_deadband(float value, float threshold);
         int             pwm_lookup_table(double throttle);
-
+        void ForceMoment2Throttle(double Force[3], double Moment[3], double & thottle_0, 
+                                                                                 double & throttle_1,
+                                                                                 double & throttle_2,
+                                                                                 double & throttle_3,
+                                                                                 double & throttle_4,
+                                                                                 double & throttle_5);
+        
 
 
 };
@@ -257,7 +263,62 @@ AUVAttitudeControl::~AUVAttitudeControl()
 
 /* Function for create a deadband for joytick
 theshold is a positive number
-*/	
+
+*/
+
+
+void AUVAttitudeControl::ForceMoment2Throttle(double Force[3], double Moment[3], double & throttle_0, 
+                                                                                 double & throttle_1,
+                                                                                 double & throttle_2,
+                                                                                 double & throttle_3,
+                                                                                 double & throttle_4,
+                                                                                 double & throttle_5){
+        
+        //AUV configuration, ideal case
+        //float H1 = 0.0;  // ideal case
+        //float L6 = 0.0; //ideal case
+
+
+        double H6 = 0.15; // for example
+
+        double L3 = 0.17; // for example
+        double L5 = 0.19; // for example
+
+        double W1 = 0.11; // for example
+        double W3 = 0.11; // for example
+
+
+        //double throttle[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+        //Without constraints on throttles
+
+        throttle_0 = 0.5 - 0.5*Force[0]/W1;
+
+        throttle_1 = 0.5 + 0.5*Force[0]/W1;
+
+        throttle_2 = -0.5*H6/W3*Force[1] -0.5*L5/(L3+L5)*Force[2] - 0.5*Moment[0]/W3 + 0.5/(L3+L5)*Moment[1];
+
+        throttle_3 =  0.5*H6/W3*Force[1] -0.5*L5/(L3+L5)*Force[2] + 0.5*Moment[0]/W3 + 0.5/(L3+L5)*Moment[1];
+
+        throttle_4 = -L3/(L3+L5)*Force[2] - 1.0/(L3+L5)*Moment[1];
+
+        throttle_5 = Force[1];
+
+        //With contraints on throttles
+        //to be continue
+
+}
+
+
+
+
+
+
+
+
+
+
+
 
 int AUVAttitudeControl::pwm_lookup_table(double throttle )
 {
@@ -353,8 +414,12 @@ AUVAttitudeControl::start()
 	}
 
 	int ret;
-	int pwm_value[6] = {1500, 1500, 1500, 1500, 1500, 1500};
-        float throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+	int pwm_value[6]  = {1500, 1500, 1500, 1500, 1500, 1500};
+        double throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+
+        double Force[3]  = {0.0, 0.0, 0.0}; //debug, for testing 
+        double Moment[3] = {0.0, 0.0, 0.0}; //debug, for testing 
+
 	
 	int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value ;
 	roll_pwm_value = pitch_pwm_value = yaw_pwm_value = thrust_pwm_value = 1500;
@@ -421,12 +486,24 @@ AUVAttitudeControl::start()
                         
    		 }
 
+                //Test with some values of Force (in N) and Moment (in N.m)
+                 Force[0]  =  15.0;  Force[1]  = 0.0; Force[2]  = 0.0;
+                 Moment[0] =  0.5;   Moment[1] = 0.5; Moment[2] = 0.5;
+
+                 //Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
+                 ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
+
+
                  for (unsigned i = 0; i < 6; i++) {  
                         
-                        //convert from kgf to N
+                        
+
+                        //convert from  N to kgf
                         throttle[i] = (double)throttle[i] / 9.80665;
 
-                        //lookup values
+                        //throttle = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+
+                        //lookup values, with values defined in kgf
                         pwm_value[i] = pwm_lookup_table((double)throttle[i]);
 
                         PX4_INFO("PWM_VALUE  %5d", pwm_value[i]);
