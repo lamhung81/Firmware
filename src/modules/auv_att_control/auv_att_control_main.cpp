@@ -191,6 +191,7 @@ private:
 
 
 	float 		joystick_deadband(float value, float threshold);
+        int             pwm_lookup_table(double throttle);
 
 
 
@@ -257,6 +258,52 @@ AUVAttitudeControl::~AUVAttitudeControl()
 /* Function for create a deadband for joytick
 theshold is a positive number
 */	
+
+int AUVAttitudeControl::pwm_lookup_table(double throttle )
+{
+        /*for motor voltage = 15V
+          Originally, from T200 Bluerobotics website, there exit thrust and pwm  for two cases: 12V and 16V
+          Interpolation: Thrust@15V = (Thrust@16V - Thrust@12V)*0.75 + Thrust@12V
+          Using online Polynomial regression: http://www.xuru.org/rt/PR.asp#Manually
+        */
+
+        double pwm = 1500.0;
+        
+        // for:    -3.8124 < throttle < 4.7037 kgf
+
+        if ((throttle > -3.8124) and (throttle < -1.5036)){
+                pwm = 0.8874*throttle*throttle + 86.1898*throttle + 1425.6971; 
+        }
+
+        if ((throttle >= -1.5036) and (throttle < -0.02)){
+                pwm = 32.0868*throttle*throttle + 159.8091*throttle + 1468.9169; 
+        }
+ 
+        // assume that motor can not generate thrust between +/-0.02 kgf 
+        if ((throttle >= -0.02) and (throttle <= 0.02)) {
+                pwm = 1500;
+        }
+
+        if ((throttle > 0.02) and (throttle <= 1.7916)){
+                pwm = 18.3647*throttle*throttle*throttle - 75.3368*throttle*throttle + 176.4630*throttle + 1520.9868; 
+        }
+
+        if ((throttle > 1.7916) and (throttle <= 4.7037)){
+                pwm = -2.1030*throttle*throttle + 82.5754*throttle + 1558.4906; 
+        }           
+
+
+        return round(pwm);
+
+}
+
+
+
+
+
+
+
+
 float AUVAttitudeControl::joystick_deadband(float joystick_value, float joystick_threshold)
 {
 	if ((float)fabs((double)joystick_value) < joystick_threshold){
@@ -306,10 +353,13 @@ AUVAttitudeControl::start()
 	}
 
 	int ret;
-	int pwm_value;
-	pwm_value = 1400;
+	int pwm_value[6] = {1500, 1500, 1500, 1500, 1500, 1500};
+        float throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+	
 	int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value ;
 	roll_pwm_value = pitch_pwm_value = yaw_pwm_value = thrust_pwm_value = 1500;
+
+       
 
 	while (1) {
 	
@@ -362,18 +412,35 @@ AUVAttitudeControl::start()
    			yaw_pwm_value    = 1500 + (int)((float)50.0*raw.yaw);
    			thrust_pwm_value = 1500 + (int)((float)50.0*raw.thrust); 
 
-                        /* debug lhnguyen pwm output to motors
+                        /* debug lhnguyen pwm output to motors */
                         PX4_INFO("Debug AUV:\t% 6d\t %6d\t %6d\t% 6d",
                                                                  roll_pwm_value,
                                                                  pitch_pwm_value,
                                                                  yaw_pwm_value,
                                                                  thrust_pwm_value);
-                        */
-
-
-
+                        
    		 }
 
+                 for (unsigned i = 0; i < 6; i++) {  
+                        
+                        //convert from kgf to N
+                        throttle[i] = (double)throttle[i] / 9.80665;
+
+                        //lookup values
+                        pwm_value[i] = pwm_lookup_table((double)throttle[i]);
+
+                        PX4_INFO("PWM_VALUE  %5d", pwm_value[i]);
+                        ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
+
+                        if (ret != OK) {
+                                PX4_ERR("PWM_SERVO_SET(%d)", i);
+                                return 1;
+                        }                 
+                 }
+                 
+
+
+                /*        
                 for (unsigned i = 0; i < 4; i++) {                                     
                         switch (i) {
                                 case 0:
@@ -404,6 +471,7 @@ AUVAttitudeControl::start()
                         
                    
                         }
+                */        
 
                         /* Delay longer than the max Oneshot duration */
                         //usleep(2542*10); //micro second
@@ -417,6 +485,10 @@ AUVAttitudeControl::start()
 
 
 		}
+          
+
+
+
 }
 
 int auv_att_control_main(int argc, char *argv[])
