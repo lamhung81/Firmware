@@ -332,11 +332,11 @@ int AUVAttitudeControl::pwm_lookup_table(double throttle )
         
         // for:    -3.8124 < throttle < 4.7037 kgf
 
-        if ((throttle > -3.8124) and (throttle < -1.5036)){
+        if ((throttle > -3.8124) and (throttle < -1.1317)){
                 pwm = 0.8874*throttle*throttle + 86.1898*throttle + 1425.6971; 
         }
 
-        if ((throttle >= -1.5036) and (throttle < -0.02)){
+        if ((throttle >= -1.1317) and (throttle < -0.02)){
                 pwm = 32.0868*throttle*throttle + 159.8091*throttle + 1468.9169; 
         }
  
