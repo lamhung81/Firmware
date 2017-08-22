@@ -292,9 +292,9 @@ void AUVAttitudeControl::ForceMoment2Throttle(double Force[3], double Moment[3],
 
         //Without constraints on throttles
 
-        throttle_0 = 0.5 - 0.5*Force[0]/W1;
+        throttle_0 =  0.5*Force[0] - 0.5*Moment[2]/W1;
 
-        throttle_1 = 0.5 + 0.5*Force[0]/W1;
+        throttle_1 =  0.5*Force[0] + 0.5*Moment[2]/W1;
 
         throttle_2 = -0.5*H6/W3*Force[1] -0.5*L5/(L3+L5)*Force[2] - 0.5*Moment[0]/W3 + 0.5/(L3+L5)*Moment[1];
 
@@ -506,7 +506,7 @@ AUVAttitudeControl::start()
                         //lookup values, with values defined in kgf
                         pwm_value[i] = pwm_lookup_table((double)throttle[i]);
 
-                        PX4_INFO("PWM_VALUE  %5d", pwm_value[i]);
+                        PX4_INFO("PWM_VALUE %d   %5d", i, pwm_value[i]);
                         ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
 
                         if (ret != OK) {
