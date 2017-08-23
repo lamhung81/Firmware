@@ -487,11 +487,24 @@ AUVAttitudeControl::start()
    		 }
 
                 //Test with some values of Force (in N) and Moment (in N.m)
-                 Force[0]  =  15.0;  Force[1]  = 0.0; Force[2]  = 0.0;
-                 Moment[0] =  0.5;   Moment[1] = 0.5; Moment[2] = 0.5;
+                 Force[0]  =  0.0;  Force[1]   = 0.0; Force[2]  = 20.0;
+                 Moment[0] =  0.0;   Moment[1] = 0.0; Moment[2] = 0.0;
 
                  //Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
                  ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
+
+                 //Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
+                 //CW: Thruster 2 and 4
+                 throttle[1] = 1.0*throttle[1];
+                 throttle[3] = 1.0*throttle[3];
+                  
+                 //CCW: Thruster 1, 3 and 6
+                 throttle[0] = -1.0*throttle[0];
+                 throttle[2] = -1.0*throttle[2];
+                 throttle[5] = -1.0*throttle[5];
+
+                 //Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
+                 throttle[4] = -1.0*throttle[4];
 
 
                  for (unsigned i = 0; i < 6; i++) {  
@@ -506,7 +519,7 @@ AUVAttitudeControl::start()
                         //lookup values, with values defined in kgf
                         pwm_value[i] = pwm_lookup_table((double)throttle[i]);
 
-                        PX4_INFO("PWM_VALUE %d   %5d", i, pwm_value[i]);
+                        PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
                         ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
 
                         if (ret != OK) {
