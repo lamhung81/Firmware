@@ -421,8 +421,8 @@ AUVAttitudeControl::start()
         double Moment[3] = {0.0, 0.0, 0.0}; //debug, for testing 
 
 	
-	int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value ;
-	roll_pwm_value = pitch_pwm_value = yaw_pwm_value = thrust_pwm_value = 1500;
+	//int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value ;
+	//roll_pwm_value = pitch_pwm_value = yaw_pwm_value = thrust_pwm_value = 1500;
 
        
 
@@ -472,27 +472,46 @@ AUVAttitudeControl::start()
    			//Convert joystick signals to pwm values, 
    			//Neutral value =1500, according to T200 Bluerobotics motor characteristic
    			//Take 1500 +/- 50 for giving small pwm value range
-   			roll_pwm_value   = 1500 + (int)((float)50.0*raw.roll);
+   			/*
+                        roll_pwm_value   = 1500 + (int)((float)50.0*raw.roll);
    			pitch_pwm_value  = 1500 + (int)((float)50.0*raw.pitch);
    			yaw_pwm_value    = 1500 + (int)((float)50.0*raw.yaw);
    			thrust_pwm_value = 1500 + (int)((float)50.0*raw.thrust); 
+                        */
 
-                        /* debug lhnguyen pwm output to motors */
+                        /* debug lhnguyen pwm output to motors 
                         PX4_INFO("Debug AUV:\t% 6d\t %6d\t %6d\t% 6d",
                                                                  roll_pwm_value,
                                                                  pitch_pwm_value,
                                                                  yaw_pwm_value,
-                                                                 thrust_pwm_value);
+                                                                 thrust_pwm_value);*/
+
+                        Force[0]  = (float)15.0*raw.thrust;
+                        Force[1]  = 0.0; 
+                        Force[2]  = 0.0;
+                        Moment[0] =  (float)2.0*raw.roll;   
+                        Moment[1] =  (float)2.0*raw.pitch;    
+                        Moment[2] =  (float)2.0*raw.yaw;   
+                        /* debug lhnguyen pwm output to motors */
+                        PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ",
+                                                                 Force[0],
+                                                                 Moment[0],
+                                                                 Moment[1],
+                                                                 Moment[2]);
                         
    		 }
 
+                /*
                 //Test with some values of Force (in N) and Moment (in N.m)
-                 Force[0]  =  0.0;  Force[1]   = 0.0; Force[2]  = 20.0;
-                 Moment[0] =  0.0;   Moment[1] = 0.0; Moment[2] = 0.0;
+                 Force[0]  =  0.0;  Force[1]   = 0.0; Force[2]  = 0.0;
+                 Moment[0] =  0.0;   Moment[1] = 0.0; Moment[2] = 2.0;
+                */
+
 
                  //Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
                  ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
 
+                 
                  //Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
                  //CW: Thruster 2 and 4
                  throttle[1] = 1.0*throttle[1];
@@ -505,7 +524,7 @@ AUVAttitudeControl::start()
 
                  //Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
                  throttle[4] = -1.0*throttle[4];
-
+                
 
                  for (unsigned i = 0; i < 6; i++) {  
                         
