@@ -24,7 +24,8 @@ set(config_module_list
 	drivers/lsm303d
 	drivers/l3gd20
 	drivers/hmc5883
-	drivers/ms5611
+	#drivers/ms5611
+	drivers/ms5837 #lhnguyen: added new pressure sensor
 	#drivers/mb12xx
 	#drivers/srf02
 	drivers/sf0x
