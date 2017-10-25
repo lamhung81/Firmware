@@ -55,6 +55,151 @@ int _pressure_sub;
 
 __EXPORT int raw_pressure_main(int argc, char *argv[]);
 
+// // lhnguyen: filter for each 5 measurements
+// int raw_pressure_main(int argc, char *argv[])
+// {
+//     PX4_INFO("Output raw pressure!"); 
+
+//     _pressure_sub = orb_subscribe(ORB_ID(pressure));
+
+//     px4_pollfd_struct_t fds[] = {
+//         { .fd = _pressure_sub,    .events = POLLIN},
+//     };
+
+//     int error_counter = 0;
+
+//     double pressure_hien_thi[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+//     double pressure_trung_gian = 0.0;
+
+//     //he so cua low pass filter
+//     double alpha = 0.95;
+
+//     for (int i = 0; i < 1000; i++) 
+//     {
+        
+//         pressure_hien_thi[0] = pressure_trung_gian;
+
+//         //lhnguyen: low-pass filter
+//         for (int j = 1; j < 6; j++)
+//             {
+
+     
+
+//         int poll_ret = px4_poll(fds, 1, 55);
+
+//         if (poll_ret == 0) 
+//         {
+//                    // this means none of our providers is giving us data 
+//                    PX4_ERR("Got no data within a second");
+
+//         } else if (poll_ret < 0) 
+//         {
+//                    // this is seriously bad - should be an emergency 
+//                if (error_counter < 10 || error_counter % 50 == 0) 
+//                {
+//                        // use a counter to prevent flooding (and slowing us down) 
+//                        PX4_ERR("ERROR return value from poll(): %d", poll_ret);
+//                }
+
+//                error_counter++;
+
+//         } else 
+//         {
+//           if (fds[0].revents & POLLIN) 
+//           {
+//             struct pressure_s press;
+
+//             orb_copy(ORB_ID(pressure), _pressure_sub, &press);
+            
+//             pressure_hien_thi [j] = alpha* (double)press.pressure_mbar + (1.0-alpha)* pressure_hien_thi[j-1];
+            
+
+//             //
+//             PX4_INFO("Pressure: %8.4f\t Temperature: %8.4f",
+//                      (double)press.pressure_mbar,
+//                      (double)press.temperature_degC); 
+
+//           }
+//         }
+
+
+
+
+
+//             }
+//             pressure_trung_gian = pressure_hien_thi [5];
+
+//                PX4_INFO("Pressure: %8.4f\t Temperature: %8.4f",
+//                      pressure_trung_gian,
+//                      pressure_trung_gian);
+
+//     }
+
+//     PX4_INFO("exiting");
+
+//     return 0;
+// }
+
+
+//lhnguyen: original code
+// int raw_pressure_main(int argc, char *argv[])
+// {
+//     PX4_INFO("Output raw pressure!"); 
+
+//     _pressure_sub = orb_subscribe(ORB_ID(pressure));
+
+//     px4_pollfd_struct_t fds[] = {
+//         { .fd = _pressure_sub,    .events = POLLIN},
+//     };
+
+//     int error_counter = 0;
+      
+//     for (int i = 0; i < 5000; i++) 
+//     {      
+      
+//         int poll_ret = px4_poll(fds, 1, 55);
+
+//         if (poll_ret == 0) 
+//         {
+//                    // this means none of our providers is giving us data 
+//                    PX4_ERR("Got no data within a second");
+
+//         } else if (poll_ret < 0) 
+//         {
+//                    // this is seriously bad - should be an emergency 
+//                if (error_counter < 10 || error_counter % 50 == 0) 
+//                {
+//                        // use a counter to prevent flooding (and slowing us down) 
+//                        PX4_ERR("ERROR return value from poll(): %d", poll_ret);
+//                }
+
+//                error_counter++;
+
+//         } else 
+//         {
+//           if (fds[0].revents & POLLIN) 
+//           {
+//             struct pressure_s press;
+
+//             orb_copy(ORB_ID(pressure), _pressure_sub, &press);
+            
+                       
+//             PX4_INFO("Pressure: %8.4f\t Temperature: %8.4f",
+//                      (double)press.pressure_mbar,
+//                      (double)press.temperature_degC); 
+//           }
+//         }
+
+
+//     }
+
+//     PX4_INFO("exiting");
+
+//     return 0;
+// }
+
+
+//lhnguyen: low pass filter for all measurement process
 int raw_pressure_main(int argc, char *argv[])
 {
     PX4_INFO("Output raw pressure!"); 
@@ -67,33 +212,57 @@ int raw_pressure_main(int argc, char *argv[])
 
     int error_counter = 0;
 
-    for (int i = 0; i < 50; i++) {
-        int poll_ret = px4_poll(fds, 1, 1000);
+    double pressure_temporial = 0.0;
+    double pressure_filtered = 0.0;
 
-        if (poll_ret == 0) {
-                   /* this means none of our providers is giving us data */
+    //coefficient of low pass filter
+    double alpha = 0.5;
+
+    for (int i = 0; i < 1000; i++) 
+    {
+        
+        pressure_temporial = pressure_filtered;
+
+            
+
+        int poll_ret = px4_poll(fds, 1, 55);
+
+        if (poll_ret == 0) 
+        {
+                   // this means none of our providers is giving us data 
                    PX4_ERR("Got no data within a second");
 
-        } else if (poll_ret < 0) {
-                   /* this is seriously bad - should be an emergency */
-               if (error_counter < 10 || error_counter % 50 == 0) {
-                       /* use a counter to prevent flooding (and slowing us down) */
+        } else if (poll_ret < 0) 
+        {
+                   // this is seriously bad - should be an emergency 
+               if (error_counter < 10 || error_counter % 50 == 0) 
+               {
+                       // use a counter to prevent flooding (and slowing us down) 
                        PX4_ERR("ERROR return value from poll(): %d", poll_ret);
                }
 
                error_counter++;
 
-        } else {
-        if (fds[0].revents & POLLIN) {
+        } else 
+        {
+          if (fds[0].revents & POLLIN) 
+          {
             struct pressure_s press;
 
             orb_copy(ORB_ID(pressure), _pressure_sub, &press);
-            PX4_INFO("Pressure: %8.4f\t Temperature: %8.4f",
-                     (double)press.pressure_mbar,
-                     (double)press.temperature_degC);
+            
+            pressure_filtered = alpha* (double)press.pressure_mbar + (1.0-alpha)* pressure_temporial;
+            
 
+            //
+            PX4_INFO("Pressure filtered: %8.4f   raw: %8.4f",
+                     (double)pressure_filtered,
+                     (double)press.pressure_mbar); 
+
+          }
         }
-        }
+
+
     }
 
     PX4_INFO("exiting");

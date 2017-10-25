@@ -56,8 +56,8 @@
 
 #include "board_config.h"
 
-#define MS5837_ADDRESS_1		0x77	/* address select pins pulled high (PX4FMU series v1.6+) */
-#define MS5837_ADDRESS_2		0x76    /* address select pins pulled low (PX4FMU prototypes) */
+#define MS5837_ADDRESS_1		0x76	/* address select pins pulled high (PX4FMU series v1.6+) */
+#define MS5837_ADDRESS_2		0x77    /* address select pins pulled low (PX4FMU prototypes) */
 
 
 

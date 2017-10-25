@@ -682,62 +682,93 @@ MS5837::collect()
 	}
 
 	/* handle a measurement */
-	if (_measure_phase == 0) {
+	//lhnguyen: from MS5837-30BA datasheet, pages 7-8
+	if (_measure_phase == 0) 
+	{
 
 		/* temperature offset (in ADC units) */
-		int32_t dT = (int32_t)raw - ((int32_t)_prom.c5_reference_temp << 8);
+		//int64_t instead of int32_t, because then Ti = 3 * POW2(dT) >> 33; 33>32
+		int64_t dT = (int32_t)raw - ((int32_t)_prom.c5_reference_temp << 8);
 
 		/* absolute temperature in centidegrees - note intermediate value is outside 32-bit range */
 		_TEMP = 2000 + (int32_t)(((int64_t)dT * _prom.c6_temp_coeff_temp) >> 23);
 
 		/* base sensor scale/offset values */
 
-			/* Perform MS5837 Caculation */
+		/* Perform MS5837 Caculation */
 
-			_OFF  = ((int64_t)_prom.c2_pressure_offset << 16) + (((int64_t)_prom.c4_temp_coeff_pres_offset * dT) >> 7);
-			_SENS = ((int64_t)_prom.c1_pressure_sens << 15) + (((int64_t)_prom.c3_temp_coeff_pres_sens * dT) >> 8);
+		_OFF  = ((int64_t)_prom.c2_pressure_offset << 16) + (((int64_t)_prom.c4_temp_coeff_pres_offset * dT) >> 7);
+		_SENS = ((int64_t)_prom.c1_pressure_sens << 15) + (((int64_t)_prom.c3_temp_coeff_pres_sens * dT) >> 8);
 
-			/* MS5837 temperature compensation */
+		/* MS5837 temperature compensation */
+		int32_t Ti ; 
+		int64_t f = POW2((int64_t)_TEMP - 2000);
+		int64_t OFFi ;
+		int64_t SENSi ;
 
-			if (_TEMP < 2000) {
+		if (_TEMP < 2000) 
+		{
+			
+			Ti = 3 * POW2(dT) >> 33; 				
+			OFFi = 3 * f >> 1;
+			SENSi = 5 * f >> 3;
 
-				int32_t T2 = POW2(dT) >> 31;
+			if (_TEMP < -1500) 
+			{
 
-				int64_t f = POW2((int64_t)_TEMP - 2000);
-				int64_t OFF2 = 5 * f >> 1;
-				int64_t SENS2 = 5 * f >> 2;
-
-				if (_TEMP < -1500) {
-
-					int64_t f2 = POW2(_TEMP + 1500);
-					OFF2 += 7 * f2;
-					SENS2 += 11 * f2 >> 1;
-				}
-
-				_TEMP -= T2;
-				_OFF  -= OFF2;
-				_SENS -= SENS2;
+				int64_t f2 = POW2(_TEMP + 1500);
+				OFFi += 7 * f2;
+				SENSi += 4 * f2 ;
 			}
 
-	} else {
+		}else
+		{
+			Ti = 2 * POW2(dT) >> 37; 				
+			OFFi = 1 * f >> 4;
+			SENSi = 0;	
+		}
+
+		_OFF  -= OFFi;
+		_SENS -= SENSi;
+		_TEMP -= Ti;
+
+
+	} else 
+	{
 
 		/* pressure calculation, result in Pa */
-		int32_t P = (((raw * _SENS) >> 21) - _OFF) >> 15;
-		_P = P * 0.01f;
-		_T = _TEMP * 0.01f;
+		int32_t P = (((raw * _SENS) >> 21) - _OFF) >> 13;
+		_P = P * 0.1f;       // convert to mbar
+		_T = _TEMP * 0.01f;  //convert to degree C
 
 		/* generate a new report */
-		pressure.temperature_degC = _TEMP / 100.0f;
-		pressure.pressure_mbar = P / 100.0f;		/* convert to millibar */
+		pressure.temperature_degC = _T;
+		pressure.pressure_mbar    = _P;	
+
+		//lhnguyen: Can this give effect to measurement frequency??
+		/* Copied from ms5611
+		 * PERFORMANCE HINT:
+		 *
+		 * The single precision calculation is 50 microseconds faster than the double
+		 * precision variant. It is however not obvious if double precision is required.
+		 * Pending more inspection and tests, we'll leave the double precision variant active.
+		 *
+		 * Measurements:
+		 * 	double precision: ms5611_read: 992 events, 258641us elapsed, min 202us max 305us
+		 *	single precision: ms5611_read: 963 events, 208066us elapsed, min 202us max 241us
+		 */	
 
 		/* publish it */
-		if (_press_topic != nullptr) {
-        orb_publish(ORB_ID(pressure), _press_topic, &pressure);
-    } else {
-        _press_topic = orb_advertise(ORB_ID(pressure),&pressure);
-    }
+		if (_press_topic != nullptr) 
+		{
+        		orb_publish(ORB_ID(pressure), _press_topic, &pressure);
+    		} else 
+    		{
+        		_press_topic = orb_advertise(ORB_ID(pressure),&pressure);
+    		}
 
-		if (_reports->force(&pressure)) {
+		if (_reports->force(&pressure)) 
+		{
 			perf_count(_buffer_overflows);
 		}
 
@@ -809,7 +840,61 @@ void	usage();
  * MS5837 crc4 cribbed from the datasheet
  */
 bool
-crc4(uint16_t *n_prom)
+crc4(uint16_t *n_prom) 
+
+//lhnguyen: code modified accoridng to MS5837-30BA
+{
+	
+	int16_t cnt;
+	uint16_t n_rem;
+	//uint16_t crc_read;
+	uint8_t n_bit;
+
+	n_rem = 0x00;
+
+	// save the read crc 
+	//crc_read = n_prom[7];
+
+	// remove CRC byte 
+	n_prom[0] = ((n_prom[0]) &  0x0FFF);
+	n_prom[7] = 0x00;
+
+	for (cnt = 0; cnt < 16; cnt++) 
+	{
+		// uneven bytes 
+		if (cnt%2 == 1) 
+		{
+			n_rem ^= (uint8_t)((n_prom[cnt >> 1]) & 0x00FF);
+
+		} else 
+		{
+			n_rem ^= (uint8_t)(n_prom[cnt >> 1] >> 8);
+		}
+
+		for (n_bit = 8; n_bit > 0; n_bit--) 
+		{
+			if (n_rem & 0x8000) 
+			{
+				n_rem = (n_rem << 1) ^ 0x3000;
+
+			} else 
+			{
+				n_rem = (n_rem << 1);
+			}
+		}
+	}
+
+	// final 4 bit remainder is CRC value 
+	n_rem = ((n_rem >> 12) & 0x000F );
+	//n_prom[7] = crc_read;
+
+	// return true if CRCs match 
+	return (n_rem ^ 0x00);
+}
+
+
+//lhnguyen: code taken from ms5803 by HippoC
+/*
 {
 	int16_t cnt;
 	uint16_t n_rem;
@@ -818,14 +903,14 @@ crc4(uint16_t *n_prom)
 
 	n_rem = 0x00;
 
-	/* save the read crc */
+	// save the read crc 
 	crc_read = n_prom[7];
 
-	/* remove CRC byte */
+	// remove CRC byte 
 	n_prom[7] = (0xFF00 & (n_prom[7]));
 
 	for (cnt = 0; cnt < 16; cnt++) {
-		/* uneven bytes */
+		// uneven bytes 
 		if (cnt & 1) {
 			n_rem ^= (uint8_t)((n_prom[cnt >> 1]) & 0x00FF);
 
@@ -843,14 +928,14 @@ crc4(uint16_t *n_prom)
 		}
 	}
 
-	/* final 4 bit remainder is CRC value */
+	// final 4 bit remainder is CRC value 
 	n_rem = (0x000F & (n_rem >> 12));
 	n_prom[7] = crc_read;
 
-	/* return true if CRCs match */
+	// return true if CRCs match 
 	return (0x000F & crc_read) == (n_rem ^ 0x00);
 }
-
+*/
 
 /**
  * Start the driver.

@@ -36,9 +36,9 @@ then
 fi
 #---------------------------------------
 #debug_lhnguyen: deactivate mc_att_control mc_pos_control
-#mc_att_control start
-auv_att_control start
-#mc_pos_control start
+mc_att_control start
+#auv_att_control start
+mc_pos_control start
 
 #
 # Start Land Detector

@@ -157,6 +157,8 @@
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/vehicle_status.h>
+#include <uORB/topics/pressure.h>
+#include <uORB/topics/sensor_combined.h>
 #include <uORB/uORB.h>
 
 /////////////////////////////////////////////////////////////////////////////
@@ -187,8 +189,14 @@ public:
 	
 private:
 	//int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value;
+	
+	//int _v_pressure_sub;  //lhnguyen: vehicle pressure subscription, for pressure and temperature
 
+	//struct pressure_s _v_pressure;  //lhnguyen: pressure and temperature around vehicle 
+        //struct sensor_combined_s _v_pressure;  //lhnguyen: pressure and temperature around vehicle //debug lhnguyen
 
+    //void vehicle_pressure_poll();
+    void read_raw_pressure();
 
 	float 		joystick_deadband(float value, float threshold);
         int             pwm_lookup_table(double throttle);
@@ -216,6 +224,15 @@ AUVAttitudeControl::AUVAttitudeControl()
 {
 
 }
+	/* subscriptions */
+	//_v_pressure_sub(-1),
+
+	//_v_pressure{}
+    //{
+
+      // }
+
+
 
 AUVAttitudeControl::~AUVAttitudeControl()
 {
@@ -225,8 +242,72 @@ AUVAttitudeControl::~AUVAttitudeControl()
 
 }
 
+/*
+void AUVAttitudeControl::vehicle_pressure_poll()
+{
+	 check if there is a new setpoint 
+	bool updated;
+	orb_check(_v_pressure_sub, &updated);
+
+	if (updated) {
+		orb_copy(ORB_ID(pressure), _v_pressure_sub, &_v_pressure);
+                //orb_copy(ORB_ID(sensor_combined), _v_pressure_sub, &_v_pressure); //debug lhnguyen
+	}
+}
+*/
 
 
+void AUVAttitudeControl::read_raw_pressure()
+{
+    //PX4_INFO("Output raw pressure!"); 
+    int _pressure_sub;
+    _pressure_sub = orb_subscribe(ORB_ID(pressure));
+
+    /*
+    px4_pollfd_struct_t fds_pressure[] = {
+        { .fd = _pressure_sub,    .events = POLLIN},
+    };
+    */
+
+    px4_pollfd_struct_t fds_pressure = {};
+    fds_pressure.events = POLLIN; 
+    fds_pressure.fd = _pressure_sub;
+
+    int error_counter = 0;
+
+    for (int i = 0; i < 5; i++) {
+        int poll_ret = px4_poll(&fds_pressure, 1, 10);
+
+        if (poll_ret == 0) {
+                   /* this means none of our providers is giving us data */
+                   PX4_ERR("Got no data within a second");
+
+        } else if (poll_ret < 0) {
+                   /* this is seriously bad - should be an emergency */
+               if (error_counter < 10 || error_counter % 50 == 0) {
+                       /* use a counter to prevent flooding (and slowing us down) */
+                       PX4_ERR("ERROR return value from poll(): %d", poll_ret);
+               }
+
+               error_counter++;
+
+        } else {
+        if (fds_pressure.revents & POLLIN) {
+            struct pressure_s press;
+
+            orb_copy(ORB_ID(pressure), _pressure_sub, &press);
+            PX4_INFO("Pressure: %8.4f\t Temperature: %8.4f",
+                     (double)press.pressure_mbar,
+                     (double)press.temperature_degC);
+
+        }
+        }
+    }
+
+    PX4_INFO("exiting");
+
+    
+}
 
 
 
@@ -385,11 +466,15 @@ AUVAttitudeControl::start()
 
 	//subcribe to set_attitude_target topic
 	int vehicle_rates_setpoint_sub_fd = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+    //        _v_pressure_sub               = orb_subscribe(ORB_ID(pressure)); //lhnguyen test pressure sensor
+            //_v_pressure_sub               = orb_subscribe(ORB_ID(sensor_combined));    //debug lhnguyen
+
 	// limit the update rate to 5 Hz
 	px4_pollfd_struct_t fds = {};
 	fds.events = POLLIN; 
 	fds.fd = vehicle_rates_setpoint_sub_fd;
 
+        
 
 	//bool updated;
 	//orb_check(_v_rates_sp_sub, &updated);
@@ -454,6 +539,25 @@ AUVAttitudeControl::start()
 			//copy sensors raw data into local buffer
 			orb_copy(ORB_ID(vehicle_rates_setpoint), vehicle_rates_setpoint_sub_fd, &raw);
 			
+			//check for updates in other topics
+			//vehicle_pressure_poll();
+                             
+            read_raw_pressure();
+
+			//_v_pressure 
+             /*           
+			PX4_INFO("Debug AUV pressure:%8.4f %8.4f ",
+								 (double)_v_pressure.pressure_mbar,
+								 (double)_v_pressure.temperature_degC); */
+                        
+                        //debug lhnguyen
+                        /*
+                        PX4_INFO("Debug AUV pressure:%1.6f %1.6f ",
+                                                                 (double)_v_pressure.baro_alt_meter,
+                                                                 (double)_v_pressure.baro_temp_celcius);*/
+
+
+			
 
 			//Apply joystick deadband, joystick_deadband = 0.1
    		 	raw.roll  = joystick_deadband(raw.roll,0.1);
@@ -492,12 +596,12 @@ AUVAttitudeControl::start()
                         Moment[0] =  (float)2.0*raw.roll;   
                         Moment[1] =  (float)2.0*raw.pitch;    
                         Moment[2] =  (float)2.0*raw.yaw;   
-                        /* debug lhnguyen pwm output to motors */
+                        /* debug lhnguyen pwm output to motors 
                         PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ",
                                                                  Force[0],
                                                                  Moment[0],
                                                                  Moment[1],
-                                                                 Moment[2]);
+                                                                 Moment[2]);*/
                         
    		 }
 
@@ -538,7 +642,7 @@ AUVAttitudeControl::start()
                         //lookup values, with values defined in kgf
                         pwm_value[i] = pwm_lookup_table((double)throttle[i]);
 
-                        PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
+                        //PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
                         ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
 
                         if (ret != OK) {

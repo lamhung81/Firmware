@@ -24,7 +24,7 @@ set(config_module_list
 	drivers/lsm303d
 	drivers/l3gd20
 	drivers/hmc5883
-	#drivers/ms5611
+	drivers/ms5611
 	drivers/ms5837 #lhnguyen: added new pressure sensor
 	#drivers/mb12xx
 	#drivers/srf02
@@ -117,7 +117,8 @@ set(config_module_list
 	#modules/mc_att_control
 	#modules/mc_pos_control
 	#modules/vtol_att_control
-	modules/auv_att_control
+	#modules/auv_att_control
+        modules/raw_pressure  #debug lhnguyen, for adding new pressure sensor
 
 	#
 	# Logging
