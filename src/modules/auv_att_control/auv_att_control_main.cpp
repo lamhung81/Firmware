@@ -187,18 +187,42 @@ public:
 	
 private:
 	//int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value;
+  bool  _task_should_exit;    /**< if true, task_main() should exit */
+  int   _control_task;      /**< task handle */
+
+
+  int   _v_rates_sp_sub;    /**< vehicle rates setpoint subscription */
+
+
+
+  int   _armed_sub;       /**< arming status subscription */
+
+  struct vehicle_rates_setpoint_s   _v_rates_sp;    /**< vehicle rates setpoint */
+  struct actuator_armed_s       _armed;       /**< actuator arming status */
+
+
+
+
+  perf_counter_t  _loop_perf;     /**< loop performance counter */
+  perf_counter_t  _controller_latency_perf;
+
+  TailsitterRecovery *_ts_opt_recovery; /**< Computes optimal rates for tailsitter recovery */
 
 
 
 	float 		joystick_deadband(float value, float threshold);
-        int             pwm_lookup_table(double throttle);
-        void ForceMoment2Throttle(double Force[3], double Moment[3], double & thottle_0, 
+  int       pwm_lookup_table(double throttle);
+  void      ForceMoment2Throttle(double Force[3], double Moment[3], double & thottle_0, 
                                                                                  double & throttle_1,
                                                                                  double & throttle_2,
                                                                                  double & throttle_3,
                                                                                  double & throttle_4,
                                                                                  double & throttle_5);
-        
+  void    vehicle_rates_setpoint_poll();
+  void    arming_status_poll();
+
+  static void task_main_trampoline(int argc, char *argv[]);
+  int    task_main();     
 
 
 };
@@ -212,22 +236,61 @@ namespace auv_att_control
 
 
 
-AUVAttitudeControl::AUVAttitudeControl()
-{
+AUVAttitudeControl::AUVAttitudeControl():
+  _task_should_exit(false),
+  _control_task(-1),
 
+  _armed_sub(-1),
+
+  _v_rates_sp{},
+  _armed{},
+
+  /* performance counters */
+  _loop_perf(perf_alloc(PC_ELAPSED, "mc_att_control")),
+  _controller_latency_perf(perf_alloc_once(PC_ELAPSED, "ctrl_latency")),
+  _ts_opt_recovery(nullptr)
+
+{
+  //_rates_sp.zero();
 }
+
+//AUVAttitudeControl::~AUVAttitudeControl()
+//{
+//	//debug lhnguyen: can phai viet destructor, for deleting memory
+//	delete auv_att_control::g_control;
+//	auv_att_control::g_control = nullptr;
+//
+//}
+
+
 
 AUVAttitudeControl::~AUVAttitudeControl()
 {
-	//debug lhnguyen: can phai viet destructor, for deleting memory
-	delete auv_att_control::g_control;
-	auv_att_control::g_control = nullptr;
+  if (_control_task != -1) {
+    /* task wakes up every 100ms or so at the longest */
+    _task_should_exit = true;
 
+    /* wait for a second for the task to quit at our request */
+    unsigned i = 0;
+
+    do {
+      /* wait 20ms */
+      usleep(20000);
+
+      /* if we have given up, kill it */
+      if (++i > 50) {
+        px4_task_delete(_control_task);
+        break;
+      }
+    } while (_control_task != -1);
+  }
+
+  if (_ts_opt_recovery != nullptr) {
+    delete _ts_opt_recovery;
+  }
+
+  auv_att_control::g_control = nullptr;
 }
-
-
-
-
 
 
 
@@ -358,13 +421,6 @@ int AUVAttitudeControl::pwm_lookup_table(double throttle )
 
 }
 
-
-
-
-
-
-
-
 float AUVAttitudeControl::joystick_deadband(float joystick_value, float joystick_threshold)
 {
 	if ((float)fabs((double)joystick_value) < joystick_threshold){
@@ -379,226 +435,408 @@ float AUVAttitudeControl::joystick_deadband(float joystick_value, float joystick
 	return joystick_value;
 }
 
-int
-AUVAttitudeControl::start()
-{
+// int
+// AUVAttitudeControl::start()
+// {
 
-	//subcribe to set_attitude_target topic
-	int vehicle_rates_setpoint_sub_fd = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
-	// limit the update rate to 5 Hz
-	px4_pollfd_struct_t fds = {};
-	fds.events = POLLIN; 
-	fds.fd = vehicle_rates_setpoint_sub_fd;
-
-
-	//bool updated;
-	//orb_check(_v_rates_sp_sub, &updated);
-
-	//if (updated) {
-	//	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
-	//}
+// 	//subcribe to set_attitude_target topic
+// 	int vehicle_rates_setpoint_sub_fd = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+// 	// limit the update rate to 5 Hz
+// 	px4_pollfd_struct_t fds = {};
+// 	fds.events = POLLIN; 
+// 	fds.fd = vehicle_rates_setpoint_sub_fd;
 
 
-        #if 0  //Debug
-        orb_set_interval(vehicle_rates_setpoint_sub_fd, 200);
-        #endif
+// 	//bool updated;
+// 	//orb_check(_v_rates_sp_sub, &updated);
+
+// 	//if (updated) {
+// 	//	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+// 	//}
 
 
-	const char *dev= PWM_OUTPUT0_DEVICE_PATH;
+//         #if 0  //Debug
+//         orb_set_interval(vehicle_rates_setpoint_sub_fd, 200);
+//         #endif
 
-	/* open for ioctl only */
-	int fd = px4_open(dev, 0);
-	if (fd < 0) {
-			PX4_ERR("can't open %s", dev);
-			return 1;
-	}
 
-	int ret;
-	int pwm_value[6]  = {1500, 1500, 1500, 1500, 1500, 1500};
-        double throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+// 	const char *dev= PWM_OUTPUT0_DEVICE_PATH;
 
-        double Force[3]  = {0.0, 0.0, 0.0}; //debug, for testing 
-        double Moment[3] = {0.0, 0.0, 0.0}; //debug, for testing 
+// 	/* open for ioctl only */
+// 	int fd = px4_open(dev, 0);
+// 	if (fd < 0) {
+// 			PX4_ERR("can't open %s", dev);
+// 			return 1;
+// 	}
+
+// 	int ret;
+// 	int pwm_value[6]  = {1500, 1500, 1500, 1500, 1500, 1500};
+//         double throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+
+//         double Force[3]  = {0.0, 0.0, 0.0}; //debug, for testing 
+//         double Moment[3] = {0.0, 0.0, 0.0}; //debug, for testing 
 
 	
-	//int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value ;
-	//roll_pwm_value = pitch_pwm_value = yaw_pwm_value = thrust_pwm_value = 1500;
+// 	//int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value ;
+// 	//roll_pwm_value = pitch_pwm_value = yaw_pwm_value = thrust_pwm_value = 1500;
 
        
 
-	while (1) {
+// 	while (1) {
 	
-		/* wait for sensor update of 1 file descriptor for 10 ms (0.01 second) */
-		int poll_ret = px4_poll(&fds, 1, 10);
+// 		/* wait for sensor update of 1 file descriptor for 10 ms (0.01 second) */
+// 		int poll_ret = px4_poll(&fds, 1, 10);
 		
-                (void) poll_ret;  
+//                 (void) poll_ret;  
 
-		// timed out - periodic check for _task_should_exit 
-                //lhnguyen debug: use the if following code block leads to the reaction of motors 
-                //only when there are new messages from vehicle_rates_setpoint
-		/*
-                if (poll_ret == 0) {
-			pwm_value = 1500; //Disarm pwm of BlueESC
-                        px4_ioctl(fd, PWM_SERVO_SET(0), pwm_value);
-                        px4_ioctl(fd, PWM_SERVO_SET(1), pwm_value);
-                        px4_ioctl(fd, PWM_SERVO_SET(2), pwm_value);
-                        px4_ioctl(fd, PWM_SERVO_SET(3), pwm_value);
-                        continue;
-		}
-                */
+// 		// timed out - periodic check for _task_should_exit 
+//                 //lhnguyen debug: use the if following code block leads to the reaction of motors 
+//                 //only when there are new messages from vehicle_rates_setpoint
+// 		/*
+//                 if (poll_ret == 0) {
+// 			pwm_value = 1500; //Disarm pwm of BlueESC
+//                         px4_ioctl(fd, PWM_SERVO_SET(0), pwm_value);
+//                         px4_ioctl(fd, PWM_SERVO_SET(1), pwm_value);
+//                         px4_ioctl(fd, PWM_SERVO_SET(2), pwm_value);
+//                         px4_ioctl(fd, PWM_SERVO_SET(3), pwm_value);
+//                         continue;
+// 		}
+//                 */
 
-                if (fds.revents & POLLIN) {
-                /* obtained data for the first file descriptor */
- 			struct vehicle_rates_setpoint_s raw;
-			memset(&raw, 0, sizeof(raw));
-			//copy sensors raw data into local buffer
-			orb_copy(ORB_ID(vehicle_rates_setpoint), vehicle_rates_setpoint_sub_fd, &raw);
+//                 if (fds.revents & POLLIN) {
+//                 /* obtained data for the first file descriptor */
+//  			struct vehicle_rates_setpoint_s raw;
+// 			memset(&raw, 0, sizeof(raw));
+// 			//copy sensors raw data into local buffer
+// 			orb_copy(ORB_ID(vehicle_rates_setpoint), vehicle_rates_setpoint_sub_fd, &raw);
 			
 
-			//Apply joystick deadband, joystick_deadband = 0.1
-   		 	raw.roll  = joystick_deadband(raw.roll,0.1);
-   			raw.pitch = joystick_deadband(raw.pitch,0.1);
-   			raw.yaw   = joystick_deadband(raw.yaw,0.1);
-   			raw.thrust= joystick_deadband(raw.thrust,0.1);
+// 			//Apply joystick deadband, joystick_deadband = 0.1
+//    		 	raw.roll  = joystick_deadband(raw.roll,0.1);
+//    			raw.pitch = joystick_deadband(raw.pitch,0.1);
+//    			raw.yaw   = joystick_deadband(raw.yaw,0.1);
+//    			raw.thrust= joystick_deadband(raw.thrust,0.1);
 
-   			/* debug lhnguyen
-                        PX4_INFO("Debug AUV:\t% 1.6f\t %1.6f\t %1.6f\t% 1.6f",
-								 (double)raw.roll,
-								 (double)raw.pitch,
-								 (double)raw.yaw,
-								 (double)raw.thrust);
-                        */
+//    			/* debug lhnguyen
+//                         PX4_INFO("Debug AUV:\t% 1.6f\t %1.6f\t %1.6f\t% 1.6f",
+// 								 (double)raw.roll,
+// 								 (double)raw.pitch,
+// 								 (double)raw.yaw,
+// 								 (double)raw.thrust);
+//                         */
    			
-   			//Convert joystick signals to pwm values, 
-   			//Neutral value =1500, according to T200 Bluerobotics motor characteristic
-   			//Take 1500 +/- 50 for giving small pwm value range
-   			/*
-                        roll_pwm_value   = 1500 + (int)((float)50.0*raw.roll);
-   			pitch_pwm_value  = 1500 + (int)((float)50.0*raw.pitch);
-   			yaw_pwm_value    = 1500 + (int)((float)50.0*raw.yaw);
-   			thrust_pwm_value = 1500 + (int)((float)50.0*raw.thrust); 
-                        */
+//    			//Convert joystick signals to pwm values, 
+//    			//Neutral value =1500, according to T200 Bluerobotics motor characteristic
+//    			//Take 1500 +/- 50 for giving small pwm value range
+//    			/*
+//                         roll_pwm_value   = 1500 + (int)((float)50.0*raw.roll);
+//    			pitch_pwm_value  = 1500 + (int)((float)50.0*raw.pitch);
+//    			yaw_pwm_value    = 1500 + (int)((float)50.0*raw.yaw);
+//    			thrust_pwm_value = 1500 + (int)((float)50.0*raw.thrust); 
+//                         */
 
-                        /* debug lhnguyen pwm output to motors 
-                        PX4_INFO("Debug AUV:\t% 6d\t %6d\t %6d\t% 6d",
-                                                                 roll_pwm_value,
-                                                                 pitch_pwm_value,
-                                                                 yaw_pwm_value,
-                                                                 thrust_pwm_value);*/
+//                         /* debug lhnguyen pwm output to motors 
+//                         PX4_INFO("Debug AUV:\t% 6d\t %6d\t %6d\t% 6d",
+//                                                                  roll_pwm_value,
+//                                                                  pitch_pwm_value,
+//                                                                  yaw_pwm_value,
+//                                                                  thrust_pwm_value);*/
 
-                        Force[0]  = (float)15.0*raw.thrust;
-                        Force[1]  = 0.0; 
-                        Force[2]  = 0.0;
-                        Moment[0] =  (float)2.0*raw.roll;   
-                        Moment[1] =  (float)2.0*raw.pitch;    
-                        Moment[2] =  (float)2.0*raw.yaw;   
-                        /* debug lhnguyen pwm output to motors */
-                        PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ",
-                                                                 Force[0],
-                                                                 Moment[0],
-                                                                 Moment[1],
-                                                                 Moment[2]);
+//                         Force[0]  = (float)15.0*raw.thrust;
+//                         Force[1]  = 0.0; 
+//                         Force[2]  = 0.0;
+//                         Moment[0] =  (float)2.0*raw.roll;   
+//                         Moment[1] =  (float)2.0*raw.pitch;    
+//                         Moment[2] =  (float)2.0*raw.yaw;   
+//                         /* debug lhnguyen pwm output to motors */
+//                         PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ",
+//                                                                  Force[0],
+//                                                                  Moment[0],
+//                                                                  Moment[1],
+//                                                                  Moment[2]);
                         
-   		 }
+//    		 }
 
-                /*
-                //Test with some values of Force (in N) and Moment (in N.m)
-                 Force[0]  =  0.0;  Force[1]   = 0.0; Force[2]  = 0.0;
-                 Moment[0] =  0.0;   Moment[1] = 0.0; Moment[2] = 2.0;
-                */
+//                 /*
+//                 //Test with some values of Force (in N) and Moment (in N.m)
+//                  Force[0]  =  0.0;  Force[1]   = 0.0; Force[2]  = 0.0;
+//                  Moment[0] =  0.0;   Moment[1] = 0.0; Moment[2] = 2.0;
+//                 */
 
 
-                 //Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
-                 ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
+//                  //Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
+//                  ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
 
                  
-                 //Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
-                 //CW: Thruster 2 and 4
-                 throttle[1] = 1.0*throttle[1];
-                 throttle[3] = 1.0*throttle[3];
+//                  //Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
+//                  //CW: Thruster 2 and 4
+//                  throttle[1] = 1.0*throttle[1];
+//                  throttle[3] = 1.0*throttle[3];
                   
-                 //CCW: Thruster 1, 3 and 6
-                 throttle[0] = -1.0*throttle[0];
-                 throttle[2] = -1.0*throttle[2];
-                 throttle[5] = -1.0*throttle[5];
+//                  //CCW: Thruster 1, 3 and 6
+//                  throttle[0] = -1.0*throttle[0];
+//                  throttle[2] = -1.0*throttle[2];
+//                  throttle[5] = -1.0*throttle[5];
 
-                 //Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
-                 throttle[4] = -1.0*throttle[4];
+//                  //Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
+//                  throttle[4] = -1.0*throttle[4];
                 
 
-                 for (unsigned i = 0; i < 6; i++) {  
+//                  for (unsigned i = 0; i < 6; i++) {  
                         
                         
 
-                        //convert from  N to kgf
-                        throttle[i] = (double)throttle[i] / 9.80665;
+//                         //convert from  N to kgf
+//                         throttle[i] = (double)throttle[i] / 9.80665;
 
-                        //throttle = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+//                         //throttle = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
 
-                        //lookup values, with values defined in kgf
-                        pwm_value[i] = pwm_lookup_table((double)throttle[i]);
+//                         //lookup values, with values defined in kgf
+//                         pwm_value[i] = pwm_lookup_table((double)throttle[i]);
 
-                        PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
-                        ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
+//                         PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
+//                         ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
 
-                        if (ret != OK) {
-                                PX4_ERR("PWM_SERVO_SET(%d)", i);
-                                return 1;
-                        }                 
-                 }
+//                         if (ret != OK) {
+//                                 PX4_ERR("PWM_SERVO_SET(%d)", i);
+//                                 return 1;
+//                         }                 
+//                  }
                  
 
 
-                /*        
-                for (unsigned i = 0; i < 4; i++) {                                     
-                        switch (i) {
-                                case 0:
-                                        pwm_value = roll_pwm_value;
-                                        break;
-                                case 1:
-                                        pwm_value = pitch_pwm_value;
-                                        break;
-                                case 2:
-                                        pwm_value = yaw_pwm_value;
-                                        break;  
-                                case 3:
-                                        pwm_value = thrust_pwm_value;
-                                        break;  
-                                default:
-                                        pwm_value = 1500;
-                                        break;
-                                }
+//                 /*        
+//                 for (unsigned i = 0; i < 4; i++) {                                     
+//                         switch (i) {
+//                                 case 0:
+//                                         pwm_value = roll_pwm_value;
+//                                         break;
+//                                 case 1:
+//                                         pwm_value = pitch_pwm_value;
+//                                         break;
+//                                 case 2:
+//                                         pwm_value = yaw_pwm_value;
+//                                         break;  
+//                                 case 3:
+//                                         pwm_value = thrust_pwm_value;
+//                                         break;  
+//                                 default:
+//                                         pwm_value = 1500;
+//                                         break;
+//                                 }
                         
-                                // PX4_INFO("PWM_VALUE  %5d", pwm_value);
-                                //ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value);
-                                ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value);       
+//                                 // PX4_INFO("PWM_VALUE  %5d", pwm_value);
+//                                 //ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value);
+//                                 ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value);       
 
-                                if (ret != OK) {
-                                        PX4_ERR("PWM_SERVO_SET(%d)", i);
-                                        return 1;
-                                }
+//                                 if (ret != OK) {
+//                                         PX4_ERR("PWM_SERVO_SET(%d)", i);
+//                                         return 1;
+//                                 }
                         
                    
-                        }
-                */        
+//                         }
+//                 */        
 
-                        /* Delay longer than the max Oneshot duration */
-                        //usleep(2542*10); //micro second
+//                         /* Delay longer than the max Oneshot duration */
+//                         //usleep(2542*10); //micro second
 
-                #ifdef __PX4_NUTTX
-                        /* Trigger all timer's channels in Oneshot mode to fire
-                         * the oneshots with updated values.
-                         */
-                        up_pwm_update();
-                #endif
-
-
-		}
-          
+//                 #ifdef __PX4_NUTTX
+//                         /* Trigger all timer's channels in Oneshot mode to fire
+//                          * the oneshots with updated values.
+//                          */
+//                         up_pwm_update();
+//                 #endif
 
 
+// 		}
+       
+// }
+
+void
+AUVAttitudeControl::vehicle_rates_setpoint_poll()
+{
+  /* check if there is a new setpoint */
+  bool updated;
+  orb_check(_v_rates_sp_sub, &updated);
+
+  if (updated) {
+    orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+  }
+}
+
+
+
+void
+AUVAttitudeControl::arming_status_poll()
+{
+  /* check if there is a new setpoint */
+  bool updated;
+  orb_check(_armed_sub, &updated);
+
+  if (updated) {
+    orb_copy(ORB_ID(actuator_armed), _armed_sub, &_armed);
+  }
+}
+
+void
+AUVAttitudeControl::task_main_trampoline(int argc, char *argv[])
+{
+  auv_att_control::g_control->task_main();
+}
+
+int
+AUVAttitudeControl::task_main()
+{
+  _v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+
+  /* wakeup source: gyro data from sensor selected by the sensor app */
+  px4_pollfd_struct_t poll_fds = {};
+  poll_fds.events = POLLIN;
+
+  // //subcribe to set_attitude_target topic
+  // int vehicle_rates_setpoint_sub_fd = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+  // // limit the update rate to 5 Hz
+  // px4_pollfd_struct_t fds = {};
+  // fds.events = POLLIN; 
+  // fds.fd = vehicle_rates_setpoint_sub_fd;
+
+  const char *dev= PWM_OUTPUT0_DEVICE_PATH;
+
+  /* open for ioctl only */
+  int fd = px4_open(dev, 0);
+  if (fd < 0) {
+      PX4_ERR("can't open %s", dev);
+      return 1;
+  }
+
+  //int ret;
+  int pwm_value[6]  = {1500, 1500, 1500, 1500, 1500, 1500};
+  double throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+
+  double Force[3]  = {0.0, 0.0, 0.0}; //debug, for testing 
+  double Moment[3] = {0.0, 0.0, 0.0}; //debug, for testing 
+
+
+  while (!_task_should_exit) {
+
+    poll_fds.fd = _v_rates_sp_sub;
+    int pret = px4_poll(&poll_fds, 1, 100);
+
+    /* timed out - periodic check for _task_should_exit */
+    if (pret == 0) {
+      continue;
+    }
+
+    /* this is undesirable but not much we can do - might want to flag unhappy status */
+    if (pret < 0) {
+      warn("auv att ctrl: poll error %d, %d", pret, errno);
+      /* sleep a bit before next try */
+      usleep(100000);
+      continue;
+    }
+
+    perf_begin(_loop_perf);
+
+    /* run controller on joystick changes */
+    if (poll_fds.revents & POLLIN) {
+      struct vehicle_rates_setpoint_s raw;
+      memset(&raw, 0, sizeof(raw));
+      //copy sensors raw data into local buffer
+      orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &raw);
+      
+
+      //Apply joystick deadband, joystick_deadband = 0.1
+      raw.roll  = joystick_deadband(raw.roll,0.1);
+      raw.pitch = joystick_deadband(raw.pitch,0.1);
+      raw.yaw   = joystick_deadband(raw.yaw,0.1);
+      raw.thrust= joystick_deadband(raw.thrust,0.1);
+
+      Force[0]  = (float)15.0*raw.thrust;
+      Force[1]  = 0.0; 
+      Force[2]  = 0.0;
+      Moment[0] =  (float)2.0*raw.roll;   
+      Moment[1] =  (float)2.0*raw.pitch;    
+      Moment[2] =  (float)2.0*raw.yaw;   
+                        
+      /* debug lhnguyen pwm output to motors */
+      PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ", Force[0], Moment[0], Moment[1], Moment[2]);
+    }
+
+    //Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
+    ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
+
+    //Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
+    //CW: Thruster 2 and 4
+    throttle[1] = 1.0*throttle[1];
+    throttle[3] = 1.0*throttle[3];
+                  
+    //CCW: Thruster 1, 3 and 6
+    throttle[0] = -1.0*throttle[0];
+    throttle[2] = -1.0*throttle[2];
+    throttle[5] = -1.0*throttle[5];
+
+    //Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
+    throttle[4] = -1.0*throttle[4];
+
+    for (unsigned i = 0; i < 6; i++) {  
+                        
+      //convert from  N to kgf
+      throttle[i] = (double)throttle[i] / 9.80665;
+
+      //throttle = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+
+      //lookup values, with values defined in kgf
+      pwm_value[i] = pwm_lookup_table((double)throttle[i]);
+
+      PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
+      int ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
+
+      if (ret != OK) {
+        PX4_ERR("PWM_SERVO_SET(%d)", i);
+        return 1;
+      }                 
+    }
+
+    #ifdef __PX4_NUTTX
+      /* Trigger all timer's channels in Oneshot mode to fire
+      * the oneshots with updated values.
+      */
+      up_pwm_update();
+    #endif
+
+
+
+    perf_end(_loop_perf);
+  }
+  _control_task = -1;
+  return 0;
 
 }
+
+
+
+int
+AUVAttitudeControl::start()
+{
+  ASSERT(_control_task == -1);
+
+  /* start the task */
+  _control_task = px4_task_spawn_cmd("auv_att_control",
+             SCHED_DEFAULT,
+             SCHED_PRIORITY_MAX - 5,
+             1700,
+             (px4_main_t)&AUVAttitudeControl::task_main_trampoline,
+             nullptr);
+
+  if (_control_task < 0) {
+    warn("task start failed");
+    return -errno;
+  }
+
+  return OK;
+}
+
 
 int auv_att_control_main(int argc, char *argv[])
 {
