@@ -815,6 +815,47 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 	mavlink_set_position_target_local_ned_t set_position_target_local_ned;
 	mavlink_msg_set_position_target_local_ned_decode(msg, &set_position_target_local_ned);
 
+	//lhnguyen debug
+	/*
+	static uint8_t flag = 0; //lhnguyen: use static for setting global variable -like!!!
+
+	bool tignore_bodyrate_msg = (bool)(set_position_target_local_ned.type_mask & 0x18);
+
+	//bool ignore_attitude_msg = (bool)(set_attitude_target.type_mask & (1 << 7));
+	if (!tignore_bodyrate_msg) { // only copy att rates sp if message contained new data
+						_rates_sp.roll = set_position_target_local_ned.vx;
+						_rates_sp.pitch = set_position_target_local_ned.vy;						
+		flag |= 0x18; // 0b0111  // Check first 3 values, in the same data package
+		//PX4_INFO("Debug flag = 0x%x", flag);
+	}
+
+	if (_rates_sp_pub == nullptr) {
+		_rates_sp_pub = orb_advertise(ORB_ID(vehicle_rates_setpoint), &_rates_sp);
+
+	} else {
+
+		//PX4_INFO("Debug flag = 0x%x", flag);
+
+		if (flag == 0xf) { 
+			// lhnguyen: uncomment for printing values
+			//PX4_INFO("Debug: % 1.6f % 1.6f % 1.6f % 1.6f  ", 
+			//	(double)_rates_sp.roll, 
+			//	(double)_rates_sp.pitch, 
+			//	(double)_rates_sp.yaw, 
+			//	(double)_rates_sp.thrust );
+			//
+
+			orb_publish(ORB_ID(vehicle_rates_setpoint), _rates_sp_pub, &_rates_sp);
+			flag = 0;
+			orb_publish(ORB_ID(position_setpoint_triplet), _pos_sp_triplet_pub,
+							    &pos_sp_triplet);
+		}
+	}
+
+
+	*/
+	//end of lhnguyen debug
+
 	struct offboard_control_mode_s offboard_control_mode = {};
 
 	bool values_finite =
@@ -1188,9 +1229,14 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 void
 MavlinkReceiver::handle_message_set_attitude_target(mavlink_message_t *msg)
 {
-	static uint8_t flag = 0; //lhnguyen: use static for setting global variable -like!!!
+	
 	mavlink_set_attitude_target_t set_attitude_target;
 	mavlink_msg_set_attitude_target_decode(msg, &set_attitude_target);
+
+	/*
+	//Begin of lhnguyen trangtdc debug 
+
+	static uint8_t flag = 0; //lhnguyen: use static for setting global variable -like!!!
 
         //debug lhnguyen, (double) for converting float to double
 	bool tignore_bodyrate_msg = (bool)(set_attitude_target.type_mask & 0x7);
@@ -1201,6 +1247,66 @@ MavlinkReceiver::handle_message_set_attitude_target(mavlink_message_t *msg)
 						_rates_sp.roll = set_attitude_target.body_roll_rate;
 						_rates_sp.pitch = set_attitude_target.body_pitch_rate;
 						_rates_sp.yaw = set_attitude_target.body_yaw_rate;
+		flag |= 0x7; // 0b0111  // Check first 3 values, in the same data package
+		//PX4_INFO("Debug flag = 0x%x", flag);
+	}					
+						
+	if (!tignore_thrust) { // dont't overwrite thrust if it's invalid
+		_rates_sp.thrust = set_attitude_target.thrust;
+		flag |= 0x8; // 0b1000  // Check first 4th value, in the next data package
+
+		//PX4_INFO("Debug flag = 0x%x", flag);
+	}
+	
+	if (_rates_sp_pub == nullptr) {
+		_rates_sp_pub = orb_advertise(ORB_ID(vehicle_rates_setpoint), &_rates_sp);
+
+	} else {
+
+		//PX4_INFO("Debug flag = 0x%x", flag);
+
+		if (flag == 0xf) { 
+			// lhnguyen: uncomment for printing values
+			//PX4_INFO("Debug: % 1.6f % 1.6f % 1.6f % 1.6f  ", 
+			//	(double)_rates_sp.roll, 
+			//	(double)_rates_sp.pitch, 
+			//	(double)_rates_sp.yaw, 
+			//	(double)_rates_sp.thrust );
+			//
+
+			orb_publish(ORB_ID(vehicle_rates_setpoint), _rates_sp_pub, &_rates_sp);
+			flag = 0;
+		}
+	}
+	
+
+	//new
+	//struct set_attitude_target_struct_s f;
+  	//memset(&f, 0, sizeof(f));
+
+	//End of debug lhnguyen
+	*/
+	
+
+
+
+
+
+	//Begin of lhnguyen debug
+
+	static uint8_t flag = 0; //lhnguyen: use static for setting global variable -like!!!
+
+        //debug lhnguyen, (double) for converting float to double
+	bool tignore_bodyrate_msg = (bool)(set_attitude_target.type_mask & 0x7);
+	bool tignore_thrust = (bool)(set_attitude_target.type_mask & (1 << 6));
+
+	//bool ignore_attitude_msg = (bool)(set_attitude_target.type_mask & (1 << 7));
+	if (!tignore_bodyrate_msg) { // only copy att rates sp if message contained new data
+						_rates_sp.roll = set_attitude_target.body_roll_rate;
+						_rates_sp.pitch = set_attitude_target.body_pitch_rate;
+						_rates_sp.yaw = set_attitude_target.body_yaw_rate;
+							//	= set_attitude_target.q[0];
+							//	= set_attitude_target.q[1];
 		flag |= 0x7; // 0b0111  // Check first 3 values, in the same data package
 		//PX4_INFO("Debug flag = 0x%x", flag);
 	}					
@@ -1238,9 +1344,16 @@ MavlinkReceiver::handle_message_set_attitude_target(mavlink_message_t *msg)
 	//struct set_attitude_target_struct_s f;
   	//memset(&f, 0, sizeof(f));
 
-
-
 	//End of debug lhnguyen
+
+
+
+
+
+
+
+
+
 
 
 	bool values_finite =

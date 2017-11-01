@@ -25,6 +25,7 @@ set(config_module_list
 	drivers/l3gd20
 	drivers/hmc5883
 	drivers/ms5611
+	drivers/ms5837  #lhnguyen: add new pressure sensor
 	#drivers/mb12xx
 	#drivers/srf02
 	drivers/sf0x
@@ -99,6 +100,7 @@ set(config_module_list
 	modules/gpio_led
 	#modules/uavcan
 	modules/land_detector
+	#modules/raw_pressure  #debug lhnguyen
 
 	#
 	# Estimation modules

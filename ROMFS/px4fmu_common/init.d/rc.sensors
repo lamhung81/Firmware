@@ -91,6 +91,14 @@ fi
 
 if ver hwcmp PX4FMU_V2
 then
+	
+	#lhnguyen: debug for automatically start ms5837
+	# External I2C bus
+	if ms5837 start
+	#if ms5837 -C -T -X start
+	then
+	fi
+
 	# External I2C bus
 	if hmc5883 -C -T -X start
 	then

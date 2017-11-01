@@ -158,6 +158,8 @@
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/uORB.h>
+#include <uORB/topics/pressure.h>
+#include <uORB/topics/optical_flow.h>  //lhnguyen debug: low pass filter for depth and depth velocity estimation
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -187,42 +189,58 @@ public:
 	
 private:
 	//int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value;
-  bool  _task_should_exit;    /**< if true, task_main() should exit */
-  int   _control_task;      /**< task handle */
+  	bool  	_task_should_exit;    /**< if true, task_main() should exit */
+  	int   	_control_task;      /**< task handle */
 
 
-  int   _v_rates_sp_sub;    /**< vehicle rates setpoint subscription */
+  	int   	_v_rates_sp_sub;    /**< vehicle rates setpoint subscription */
+  	int 	_pressure_sub;      // pressure subscription
+
+
+	float 	_vzr;
+	float   _zr;
+	float 	_Fcz;
+
+	float 	_depth_estimated;
+	float 	_v_depth_estimated; 
+
+
+  	int   	_armed_sub;       /**< arming status subscription */
+
+	struct  pressure_s _pressure;                      //pressure
+  	struct 	vehicle_rates_setpoint_s   _v_rates_sp;    /**< vehicle rates setpoint */
+
+  	struct 	actuator_armed_s       _armed;             /**< actuator arming status */
 
 
 
-  int   _armed_sub;       /**< arming status subscription */
 
-  struct vehicle_rates_setpoint_s   _v_rates_sp;    /**< vehicle rates setpoint */
-  struct actuator_armed_s       _armed;       /**< actuator arming status */
+  	perf_counter_t  _loop_perf;     /**< loop performance counter */
+  	perf_counter_t  _controller_latency_perf;
 
-
-
-
-  perf_counter_t  _loop_perf;     /**< loop performance counter */
-  perf_counter_t  _controller_latency_perf;
-
-  TailsitterRecovery *_ts_opt_recovery; /**< Computes optimal rates for tailsitter recovery */
+  	TailsitterRecovery *_ts_opt_recovery; /**< Computes optimal rates for tailsitter recovery */
 
 
 
-	float 		joystick_deadband(float value, float threshold);
-  int       pwm_lookup_table(double throttle);
-  void      ForceMoment2Throttle(double Force[3], double Moment[3], double & thottle_0, 
+	float 	joystick_deadband(float value, float threshold);
+  	int     pwm_lookup_table(double throttle);
+  	void    ForceMoment2Throttle(double Force[3], double Moment[3], double & thottle_0, 
                                                                                  double & throttle_1,
                                                                                  double & throttle_2,
                                                                                  double & throttle_3,
                                                                                  double & throttle_4,
                                                                                  double & throttle_5);
-  void    vehicle_rates_setpoint_poll();
-  void    arming_status_poll();
+  	void    vehicle_rates_setpoint_poll();
+  	void    arming_status_poll();
 
-  static void task_main_trampoline(int argc, char *argv[]);
-  int    task_main();     
+  	void 	pressure_poll();
+
+  	void 	depth_estimate(float dt);
+
+  	void	control_depth(float dt);
+
+  	static 	void task_main_trampoline(int argc, char *argv[]);
+  	int    	task_main();     
 
 
 };
@@ -240,8 +258,16 @@ AUVAttitudeControl::AUVAttitudeControl():
   _task_should_exit(false),
   _control_task(-1),
 
+  _vzr(5.0),
+  _zr(0.0),
+  _Fcz(0.0),
+
+  _depth_estimated(0.0),
+  _v_depth_estimated(0.0),
+  
   _armed_sub(-1),
 
+  _pressure{},
   _v_rates_sp{},
   _armed{},
 
@@ -666,7 +692,6 @@ AUVAttitudeControl::vehicle_rates_setpoint_poll()
 }
 
 
-
 void
 AUVAttitudeControl::arming_status_poll()
 {
@@ -680,6 +705,96 @@ AUVAttitudeControl::arming_status_poll()
 }
 
 void
+AUVAttitudeControl::pressure_poll()
+{
+  /* check if there is a new setpoint */
+  bool updated;
+  orb_check(_pressure_sub, &updated);
+
+  if (updated) {
+    orb_copy(ORB_ID(pressure), _pressure_sub, &_pressure);
+  }
+}
+
+
+
+
+void
+AUVAttitudeControl::depth_estimate(float dt)
+{
+	float k1 = 20.0;//2.0;
+    	float k2 = 100.0;//1.0;
+        
+    	//double u = 0.0; //depth velocity
+    	float pressure_zero_level = 1030; 
+
+	//depth and depth velocity observator
+        // x = (_pressure - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
+        // x_hat_dot = u_hat + k1*(x - x_hat);
+        // u_hat_dot = k2*(x - x_hat);
+        // x_hat += x_hat_dot*dt;
+        // u_hat += u_hat_dot*dt; 
+
+        //o_f_p.pixel_flow_x_integral  = x_hat;                             //depth
+        //o_f_p.pixel_flow_y_integral  = (float)-1.0*u_hat;        //depth velocity
+
+        float 	x_hat_dot = 0.0;
+        float 	u_hat_dot = 0.0;
+        float 	_depth_measured = 0.0;
+
+        orb_copy(ORB_ID(pressure), _pressure_sub, &_pressure);
+
+        _depth_measured     = (_pressure.pressure_mbar - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
+        x_hat_dot           = _v_depth_estimated + k1*(_depth_measured - _depth_estimated);
+        u_hat_dot           = k2*(_depth_measured - _depth_estimated);
+        _depth_estimated   += x_hat_dot*dt;
+        _v_depth_estimated += u_hat_dot*dt; 
+
+    	PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
+}
+
+
+void
+AUVAttitudeControl::control_depth(float dt)
+{       
+	
+      
+	//vehicle_rates_setpoint_poll();  //lhnguyen: ko lam viec
+	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+	_vzr =(float)-1.0*_v_rates_sp.thrust;
+
+	//Apply deadband
+	_vzr = joystick_deadband(_vzr,0.1);
+
+	//Update reference depth value
+	_zr += _vzr*dt;  
+
+	//limit min and max depth 
+	if (_zr <= (float)0.2){
+		_zr  = (float) 0.2;
+		_vzr = (float) 0.0;
+	} 
+
+	if (_zr >= (float)2.0) {
+		_zr = (float) 2.0;
+		_vzr = (float) 0.0;
+	}
+
+	//Control gains
+	float kp = 2.0;
+	float kd = 1.0;
+	float mass_total = 11.62 ; 
+
+	depth_estimate(dt);
+
+	_Fcz = mass_total*(-kp*(_depth_estimated - _zr) - kd*(_v_depth_estimated - _vzr));
+
+	PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
+
+}
+
+
+void
 AUVAttitudeControl::task_main_trampoline(int argc, char *argv[])
 {
   auv_att_control::g_control->task_main();
@@ -688,129 +803,176 @@ AUVAttitudeControl::task_main_trampoline(int argc, char *argv[])
 int
 AUVAttitudeControl::task_main()
 {
-  _v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+ 	 _v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+ 	 _pressure_sub   = orb_subscribe(ORB_ID(pressure));
 
-  /* wakeup source: gyro data from sensor selected by the sensor app */
-  px4_pollfd_struct_t poll_fds = {};
-  poll_fds.events = POLLIN;
+  	/* wakeup source: gyro data from sensor selected by the sensor app */
+ 	 px4_pollfd_struct_t poll_fds = {};
+ 	 poll_fds.events = POLLIN;
 
-  // //subcribe to set_attitude_target topic
-  // int vehicle_rates_setpoint_sub_fd = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
-  // // limit the update rate to 5 Hz
-  // px4_pollfd_struct_t fds = {};
-  // fds.events = POLLIN; 
-  // fds.fd = vehicle_rates_setpoint_sub_fd;
+  	// //subcribe to set_attitude_target topic
+ 	 // int vehicle_rates_setpoint_sub_fd = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+ 	 // // limit the update rate to 5 Hz
+  	// px4_pollfd_struct_t fds = {};
+  	// fds.events = POLLIN; 
+  	// fds.fd = vehicle_rates_setpoint_sub_fd;
 
-  const char *dev= PWM_OUTPUT0_DEVICE_PATH;
+  	const char *dev= PWM_OUTPUT0_DEVICE_PATH;
 
-  /* open for ioctl only */
-  int fd = px4_open(dev, 0);
-  if (fd < 0) {
-      PX4_ERR("can't open %s", dev);
-      return 1;
-  }
+ 	 /* open for ioctl only */
+  	int fd = px4_open(dev, 0);
+  	if (fd < 0) {
+      		PX4_ERR("can't open %s", dev);
+      		return 1;
+  	}
 
-  //int ret;
-  int pwm_value[6]  = {1500, 1500, 1500, 1500, 1500, 1500};
-  double throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+  	//int ret;
+  	int pwm_value[6]  = {1500, 1500, 1500, 1500, 1500, 1500};
+  	double throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
 
-  double Force[3]  = {0.0, 0.0, 0.0}; //debug, for testing 
-  double Moment[3] = {0.0, 0.0, 0.0}; //debug, for testing 
+  	double Force[3]  = {0.0, 0.0, 0.0}; //debug, for testing 
+  	double Moment[3] = {0.0, 0.0, 0.0}; //debug, for testing 
 
 
-  while (!_task_should_exit) {
+  	while (!_task_should_exit) {
 
-    poll_fds.fd = _v_rates_sp_sub;
-    int pret = px4_poll(&poll_fds, 1, 100);
+    		poll_fds.fd = _v_rates_sp_sub;
+    		int pret = px4_poll(&poll_fds, 1, 10);
 
-    /* timed out - periodic check for _task_should_exit */
-    if (pret == 0) {
-      continue;
-    }
+   		/* timed out - periodic check for _task_should_exit */
+    		if (pret == 0) {
+     	 		continue;
+    		}
 
-    /* this is undesirable but not much we can do - might want to flag unhappy status */
-    if (pret < 0) {
-      warn("auv att ctrl: poll error %d, %d", pret, errno);
-      /* sleep a bit before next try */
-      usleep(100000);
-      continue;
-    }
+    		/* this is undesirable but not much we can do - might want to flag unhappy status */
+   		if (pret < 0) {
+      			warn("auv att ctrl: poll error %d, %d", pret, errno);
+      			/* sleep a bit before next try */
+      			usleep(100000);
+      			continue;
+    		}
 
-    perf_begin(_loop_perf);
+    		/*
+    		static uint64_t last_run = 0;
+		float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
+		last_run = hrt_absolute_time();
 
-    /* run controller on joystick changes */
-    if (poll_fds.revents & POLLIN) {
-      struct vehicle_rates_setpoint_s raw;
-      memset(&raw, 0, sizeof(raw));
-      //copy sensors raw data into local buffer
-      orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &raw);
+		// guard against too small (< 2ms) and too large (> 20ms) dt's //
+		if (dt < 0.002f) {
+		dt = 0.002f;
+
+		} else if (dt > 0.02f) {
+		dt = 0.02f;
+		}
+
+    		control_depth(dt);
+    		*/
+
+
+
+    		perf_begin(_loop_perf);
+
+    		/* run controller on joystick changes */
+    		if (poll_fds.revents & POLLIN) {
+
+    	
+        		static uint64_t last_run = 0;
+			float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
+			last_run = hrt_absolute_time();
+
+			// guard against too small (< 2ms) and too large (> 20ms) dt's 
+			if (dt < 0.002f) {
+				dt = 0.002f;
+
+			} else if (dt > 0.02f) {
+				dt = 0.02f;
+			}	
+	
+
+     			struct vehicle_rates_setpoint_s raw;
+        		memset(&raw, 0, sizeof(raw));
+        		//copy sensors raw data into local buffer
+        		orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &raw);
+
+        		pressure_poll();
       
 
-      //Apply joystick deadband, joystick_deadband = 0.1
-      raw.roll  = joystick_deadband(raw.roll,0.1);
-      raw.pitch = joystick_deadband(raw.pitch,0.1);
-      raw.yaw   = joystick_deadband(raw.yaw,0.1);
-      raw.thrust= joystick_deadband(raw.thrust,0.1);
+        		//Apply joystick deadband, joystick_deadband = 0.1
+        		raw.roll  = joystick_deadband(raw.roll,0.1);
+        		raw.pitch = joystick_deadband(raw.pitch,0.1);
+        		raw.yaw   = joystick_deadband(raw.yaw,0.1);
+        		raw.thrust= joystick_deadband(raw.thrust,0.1);
 
-      Force[0]  = (float)15.0*raw.thrust;
-      Force[1]  = 0.0; 
-      Force[2]  = 0.0;
-      Moment[0] =  (float)2.0*raw.roll;   
-      Moment[1] =  (float)2.0*raw.pitch;    
-      Moment[2] =  (float)2.0*raw.yaw;   
+        		control_depth(dt);
+        		//PX4_INFO("Debug depth: %1.6f  %1.6f ", (double)_zr, (double)_vzr);
+
+
+      			// Force[0]  = (float)15.0*raw.thrust;
+      			// Force[1]  = 0.0; 
+      			// Force[2]  = 0.0;
+      			// Moment[0] =  (float)2.0*raw.roll;   
+      			// Moment[1] =  (float)2.0*raw.pitch;    
+      			// Moment[2] =  (float)2.0*raw.yaw;   
+
+      			Force[0]  =  (float)0.0;
+      			Force[1]  =  (float)0.0; 
+      			Force[2]  =  _Fcz;
+      			Moment[0] =  (float)0.0;   
+      			Moment[1] =  (float)0.0;    
+      			Moment[2] =  (float)0.0;  
                         
-      /* debug lhnguyen pwm output to motors */
-      PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ", Force[0], Moment[0], Moment[1], Moment[2]);
-    }
+      			/* debug lhnguyen pwm output to motors */
+      			PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ", Force[2], Moment[0], Moment[1], Moment[2]);
+    		}
 
-    //Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
-    ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
+    		//Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
+    		ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
 
-    //Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
-    //CW: Thruster 2 and 4
-    throttle[1] = 1.0*throttle[1];
-    throttle[3] = 1.0*throttle[3];
+    		//Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
+    		//CW: Thruster 2 and 4
+    		throttle[1] = 1.0*throttle[1];
+    		throttle[3] = 1.0*throttle[3];
                   
-    //CCW: Thruster 1, 3 and 6
-    throttle[0] = -1.0*throttle[0];
-    throttle[2] = -1.0*throttle[2];
-    throttle[5] = -1.0*throttle[5];
+    		//CCW: Thruster 1, 3 and 6
+    		throttle[0] = -1.0*throttle[0];
+    		throttle[2] = -1.0*throttle[2];
+    		throttle[5] = -1.0*throttle[5];
 
-    //Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
-    throttle[4] = -1.0*throttle[4];
+    		//Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
+    		throttle[4] = -1.0*throttle[4];
 
-    for (unsigned i = 0; i < 6; i++) {  
+    		for (unsigned i = 0; i < 6; i++) {  
                         
-      //convert from  N to kgf
-      throttle[i] = (double)throttle[i] / 9.80665;
+      			//convert from  N to kgf
+      			throttle[i] = (double)throttle[i] / 9.80665;
 
-      //throttle = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+      			//throttle = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
 
-      //lookup values, with values defined in kgf
-      pwm_value[i] = pwm_lookup_table((double)throttle[i]);
+      			//lookup values, with values defined in kgf
+      			pwm_value[i] = pwm_lookup_table((double)throttle[i]);
 
-      PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
-      int ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
+      			PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
+      			int ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
 
-      if (ret != OK) {
-        PX4_ERR("PWM_SERVO_SET(%d)", i);
-        return 1;
-      }                 
-    }
+      			if (ret != OK) {
+        			PX4_ERR("PWM_SERVO_SET(%d)", i);
+        			return 1;
+      			}                 
+    		}
 
-    #ifdef __PX4_NUTTX
-      /* Trigger all timer's channels in Oneshot mode to fire
-      * the oneshots with updated values.
-      */
-      up_pwm_update();
-    #endif
+   	 	#ifdef __PX4_NUTTX
+      		/* Trigger all timer's channels in Oneshot mode to fire
+     	 	* the oneshots with updated values.
+      		*/
+      		up_pwm_update();
+    		#endif
 
 
 
-    perf_end(_loop_perf);
-  }
-  _control_task = -1;
-  return 0;
+   		 perf_end(_loop_perf);
+  	}
+ 	 _control_task = -1;
+  	return 0;
 
 }
 
