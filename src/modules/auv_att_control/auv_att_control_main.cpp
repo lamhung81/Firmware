@@ -840,9 +840,11 @@ AUVAttitudeControl::task_main()
     		int pret = px4_poll(&poll_fds, 1, 10);
 
    		/* timed out - periodic check for _task_should_exit */
-    		if (pret == 0) {
-     	 		continue;
-    		}
+   		//lhnguyen debu: comment to avoid periodic check joystick changes!!! Important in practice!!!
+    		//if (pret == 0) {
+    		//	PX4_INFO("Debug AUV continue");
+     	 	//	continue;
+    		//}
 
     		/* this is undesirable but not much we can do - might want to flag unhappy status */
    		if (pret < 0) {
@@ -873,8 +875,10 @@ AUVAttitudeControl::task_main()
     		perf_begin(_loop_perf);
 
     		/* run controller on joystick changes */
-    		if (poll_fds.revents & POLLIN) {
 
+    		//lhnguyen debug: Comment for avoiding joystick change checking!!!
+    		//if (poll_fds.revents & POLLIN) {
+    		if (true){
     	
         		static uint64_t last_run = 0;
 			float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
