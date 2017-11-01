@@ -840,7 +840,7 @@ AUVAttitudeControl::task_main()
     		int pret = px4_poll(&poll_fds, 1, 10);
 
    		/* timed out - periodic check for _task_should_exit */
-   		//lhnguyen debu: comment to avoid periodic check joystick changes!!! Important in practice!!!
+   		//lhnguyen debug: comment to avoid periodic check joystick changes!!! Important in practice!!!
     		//if (pret == 0) {
     		//	PX4_INFO("Debug AUV continue");
      	 	//	continue;
@@ -884,13 +884,18 @@ AUVAttitudeControl::task_main()
 			float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
 			last_run = hrt_absolute_time();
 
-			// guard against too small (< 2ms) and too large (> 20ms) dt's 
-			if (dt < 0.002f) {
-				dt = 0.002f;
+			//lhnguyen debug: 
+			//PX4_INFO("Debug AUV last_run = %lld", last_run);
+			//PX4_INFO("Debug AUV dt = %1.6f", (double)dt);
 
-			} else if (dt > 0.02f) {
-				dt = 0.02f;
-			}	
+			//lhnguyen debug: do not use this guard
+			// guard against too small (< 2ms) and too large (> 20ms) dt's 
+			//if (dt < 0.002f) {
+			//	dt = 0.002f;
+
+			//} else if (dt > 0.02f) {
+			//	dt = 0.02f;
+			//}	
 	
 
      			struct vehicle_rates_setpoint_s raw;
