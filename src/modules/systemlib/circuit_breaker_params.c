@@ -81,7 +81,8 @@ PARAM_DEFINE_INT32(CBRK_RATE_CTRL, 0);
  * @max 22027
  * @group Circuit Breaker
  */
-PARAM_DEFINE_INT32(CBRK_IO_SAFETY, 0);
+//PARAM_DEFINE_INT32(CBRK_IO_SAFETY, 0);
+PARAM_DEFINE_INT32(CBRK_IO_SAFETY, 22027); //lhnguyen debug: disable switch button
 
 /**
  * Circuit breaker for airspeed sensor
@@ -168,4 +169,5 @@ PARAM_DEFINE_INT32(CBRK_BUZZER, 0);
  * @max 197848
  * @group Circuit Breaker
  */
-PARAM_DEFINE_INT32(CBRK_USB_CHK, 0);
+//PARAM_DEFINE_INT32(CBRK_USB_CHK, 0);
+PARAM_DEFINE_INT32(CBRK_USB_CHK, 197848); //lhnguyen debug: disable USB connection check

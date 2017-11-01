@@ -1029,6 +1029,7 @@ int preflight_check(struct vehicle_status_s *status, orb_advert_t *mavlink_log_p
 			    checkAirspeed, (status->rc_input_mode == vehicle_status_s::RC_IN_MODE_DEFAULT),
 			    !arm_without_gps, true, status->is_vtol, reportFailures, prearm, time_since_boot);
 
+	// lhnguyen debug: Ignore USB connection check
 	if (!status_flags->circuit_breaker_engaged_usb_check && status_flags->usb_connected && prearm) {
 		preflight_ok = false;
 
@@ -1036,6 +1037,7 @@ int preflight_check(struct vehicle_status_s *status, orb_advert_t *mavlink_log_p
 			mavlink_log_critical(mavlink_log_pub, "ARMING DENIED: Flying with USB is not safe");
 		}
 	}
+	
 
 	if (battery->warning == battery_status_s::BATTERY_WARNING_LOW) {
 		preflight_ok = false;

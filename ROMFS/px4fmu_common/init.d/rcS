@@ -319,6 +319,13 @@ then
 	fi
 	unset AUTOCNF
 
+
+	# lhnguyen: Disable safety switch by default on PX4FMU_V2
+	#	if ver hwcmp PX4FMU_V2
+	#	then
+	#		param set CBRK_IO_SAFETY 22027
+	#	fi
+
 	set IO_PRESENT no
 
 	if [ $USE_IO == yes ]

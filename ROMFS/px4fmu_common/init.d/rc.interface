@@ -102,6 +102,18 @@ then
 		fi
 	fi
 
+	# lhguyen debug, according to blue ESC thruster
+	# Per channel disarmed settings
+	#
+	pwm disarmed -c 1 -p 1500
+	pwm disarmed -c 2 -p 1500
+	pwm disarmed -c 3 -p 1500
+	pwm disarmed -c 4 -p 1500
+	pwm disarmed -c 5 -p 1500
+	pwm disarmed -c 6 -p 1500
+	pwm disarmed -c 7 -p 1500
+	pwm disarmed -c 8 -p 1500
+
 	if [ $FAILSAFE != none ]
 	then
 		pwm failsafe -d ${OUTPUT_DEV} ${FAILSAFE}
