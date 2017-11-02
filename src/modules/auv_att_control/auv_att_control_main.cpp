@@ -195,6 +195,7 @@ private:
 
   	int   	_v_rates_sp_sub;    /**< vehicle rates setpoint subscription */
   	int 	_pressure_sub;      // pressure subscription
+  	int     _v_att_sp_sub;
 
 
 	float 	_vzr;
@@ -209,7 +210,9 @@ private:
 
 	struct  pressure_s _pressure;                      //pressure
   	struct 	vehicle_rates_setpoint_s   _v_rates_sp;    /**< vehicle rates setpoint */
+  	struct  vehicle_attitude_setpoint_s  _v_att_sp; 
 
+  	
   	struct 	actuator_armed_s       _armed;             /**< actuator arming status */
 
 
@@ -269,6 +272,7 @@ AUVAttitudeControl::AUVAttitudeControl():
 
   _pressure{},
   _v_rates_sp{},
+  _v_att_sp{},
   _armed{},
 
   /* performance counters */
@@ -750,7 +754,7 @@ AUVAttitudeControl::depth_estimate(float dt)
         _depth_estimated   += x_hat_dot*dt;
         _v_depth_estimated += u_hat_dot*dt; 
 
-    	PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
+    	//PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
 }
 
 
@@ -789,7 +793,7 @@ AUVAttitudeControl::control_depth(float dt)
 
 	_Fcz = mass_total*(-kp*(_depth_estimated - _zr) - kd*(_v_depth_estimated - _vzr));
 
-	PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
+	//PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
 
 }
 
@@ -805,6 +809,7 @@ AUVAttitudeControl::task_main()
 {
  	 _v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
  	 _pressure_sub   = orb_subscribe(ORB_ID(pressure));
+ 	 _v_att_sp_sub 	 = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));  //for disarm
 
   	/* wakeup source: gyro data from sensor selected by the sensor app */
  	 px4_pollfd_struct_t poll_fds = {};
@@ -845,6 +850,35 @@ AUVAttitudeControl::task_main()
     		//	PX4_INFO("Debug AUV continue");
      	 	//	continue;
     		//}
+
+
+
+     		//struct vehicle_attitude_setpoint_s raw_att;
+        	//memset(&raw_att, 0, sizeof(raw_att));
+        	//copy sensors raw data into local buffer
+        	//orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &raw_att);
+        	orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
+        	if (_v_att_sp.q_d[1] < (float)-0.98) {
+    			PX4_INFO("Debug AUV continue");
+
+    			//lhnguyen debug: disarm to pwm = 1500 uc
+    			for (unsigned i = 0; i < 6; i++) {                          
+      			    			
+      			int ret = px4_ioctl(fd, PWM_SERVO_SET(i), 1500);       
+
+      			if (ret != OK) {
+        			PX4_ERR("PWM_SERVO_SET(%d)", i);
+        			return 1;
+      			}                 
+    		}
+
+    			//lhnguyen debug: Exit from auv_att_control
+    			_task_should_exit = true;
+     	 		continue;
+
+    		}
+
+
 
     		/* this is undesirable but not much we can do - might want to flag unhappy status */
    		if (pret < 0) {
@@ -931,7 +965,7 @@ AUVAttitudeControl::task_main()
       			Moment[2] =  (float)0.0;  
                         
       			/* debug lhnguyen pwm output to motors */
-      			PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ", Force[2], Moment[0], Moment[1], Moment[2]);
+      			//PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ", Force[2], Moment[0], Moment[1], Moment[2]);
     		}
 
     		//Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
@@ -960,7 +994,7 @@ AUVAttitudeControl::task_main()
       			//lookup values, with values defined in kgf
       			pwm_value[i] = pwm_lookup_table((double)throttle[i]);
 
-      			PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
+      			//PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
       			int ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
 
       			if (ret != OK) {
