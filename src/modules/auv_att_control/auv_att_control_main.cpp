@@ -838,7 +838,7 @@ AUVAttitudeControl::task_main()
   	double Force[3]  = {0.0, 0.0, 0.0}; //debug, for testing 
   	double Moment[3] = {0.0, 0.0, 0.0}; //debug, for testing 
 
-
+  	
   	while (!_task_should_exit) {
 
     		poll_fds.fd = _v_rates_sp_sub;
@@ -864,13 +864,13 @@ AUVAttitudeControl::task_main()
     			//lhnguyen debug: disarm to pwm = 1500 uc
     			for (unsigned i = 0; i < 6; i++) {                          
       			    			
-      			int ret = px4_ioctl(fd, PWM_SERVO_SET(i), 1500);       
+      				int ret = px4_ioctl(fd, PWM_SERVO_SET(i), 1500);       
 
-      			if (ret != OK) {
-        			PX4_ERR("PWM_SERVO_SET(%d)", i);
-        			return 1;
-      			}                 
-    		}
+      				if (ret != OK) {
+        				PX4_ERR("PWM_SERVO_SET(%d)", i);
+        				return 1;
+      				}                 
+    			}
 
     			//lhnguyen debug: Exit from auv_att_control
     			_task_should_exit = true;
