@@ -1326,8 +1326,9 @@ MavlinkReceiver::handle_message_set_attitude_target(mavlink_message_t *msg)
 		//PX4_INFO("Debug flag = 0x%x", flag);
 
 		if (flag == 0xf) { 
-			/* lhnguyen: uncomment for printing values
-			PX4_INFO("Debug: % 1.6f % 1.6f % 1.6f % 1.6f  ", 
+			// lhnguyen: uncomment for printing values
+			/*
+			PX4_INFO("Debug mavlink1: % 1.6f % 1.6f % 1.6f % 1.6f  ", 
 				(double)_rates_sp.roll, 
 				(double)_rates_sp.pitch, 
 				(double)_rates_sp.yaw, 
@@ -1339,6 +1340,45 @@ MavlinkReceiver::handle_message_set_attitude_target(mavlink_message_t *msg)
 		}
 	}
 	
+	static uint8_t flag2 = 0x00; 
+	bool tignore_quaternion = (bool)(set_attitude_target.type_mask & (1 << 7));
+	if (!tignore_quaternion) { // only copy att rates sp if message contained new data
+						_att_sp.q_d[0] = set_attitude_target.q[0];;
+						_att_sp.q_d[1] = set_attitude_target.q[1];	
+
+						/*
+						PX4_INFO("Debug mavlink3: % 1.6f % 1.6f ", 
+							(double)set_attitude_target.q[0], 
+							(double)set_attitude_target.q[1]);
+						*/
+
+		flag2 |= 0xc0; // 0b1100 0000 // Check first 2values, in the same data package
+		//PX4_INFO("Debug flag = 0x%x", flag);
+	}
+
+	if (_att_sp_pub == nullptr) {
+		_att_sp_pub = orb_advertise(ORB_ID(vehicle_attitude_setpoint), &_att_sp);
+
+	} else {
+
+		//PX4_INFO("Debug flag = 0x%x", flag);
+
+		if (flag2 == 0xc0) { 
+			// lhnguyen: uncomment for printing values
+
+			/*
+			PX4_INFO("Debug mavlink2: % 1.6f % 1.6f ", 
+				(double)_att_sp.q_d[0], 
+				(double)_att_sp.q_d[1]);
+			*/
+
+			orb_publish(ORB_ID(vehicle_attitude_setpoint), _att_sp_pub, &_att_sp);
+			flag2 = 0x00;
+		}
+	}
+
+
+
 
 	//new
 	//struct set_attitude_target_struct_s f;
