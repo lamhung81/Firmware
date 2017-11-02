@@ -859,7 +859,7 @@ AUVAttitudeControl::task_main()
         	//orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &raw_att);
         	orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
         	if (_v_att_sp.q_d[1] < (float)-0.98) {
-    			PX4_INFO("Debug AUV continue");
+    			PX4_INFO("Emergency stop from joystick");
 
     			//lhnguyen debug: disarm to pwm = 1500 uc
     			for (unsigned i = 0; i < 6; i++) {                          
