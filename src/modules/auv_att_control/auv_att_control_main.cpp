@@ -754,7 +754,7 @@ AUVAttitudeControl::depth_estimate(float dt)
         _depth_estimated   += x_hat_dot*dt;
         _v_depth_estimated += u_hat_dot*dt; 
 
-    	//PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
+    	PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
 }
 
 
@@ -793,7 +793,7 @@ AUVAttitudeControl::control_depth(float dt)
 
 	_Fcz = mass_total*(-kp*(_depth_estimated - _zr) - kd*(_v_depth_estimated - _vzr));
 
-	//PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
+	PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
 
 }
 
@@ -994,7 +994,7 @@ AUVAttitudeControl::task_main()
       			//lookup values, with values defined in kgf
       			pwm_value[i] = pwm_lookup_table((double)throttle[i]);
 
-      			//PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
+      			PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
       			int ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
 
       			if (ret != OK) {
