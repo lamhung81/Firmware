@@ -765,10 +765,13 @@ AUVAttitudeControl::control_depth(float dt)
       
 	//vehicle_rates_setpoint_poll();  //lhnguyen: ko lam viec
 	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
-	_vzr =(float)-1.0*_v_rates_sp.thrust;
+	_vzr =(float)-1.0*_v_rates_sp.thrust;  
 
 	//Apply deadband
 	_vzr = joystick_deadband(_vzr,0.1);
+
+	// choose 0.1 for smaller reference depth velocity input from joystick
+	_vzr = (float)0.1*_vzr;
 
 	//Update reference depth value
 	_zr += _vzr*dt;  
@@ -779,8 +782,8 @@ AUVAttitudeControl::control_depth(float dt)
 		_vzr = (float) 0.0;
 	} 
 
-	if (_zr >= (float)2.0) {
-		_zr = (float) 2.0;
+	if (_zr >= (float)0.6) {
+		_zr = (float) 0.6;
 		_vzr = (float) 0.0;
 	}
 
@@ -833,7 +836,9 @@ AUVAttitudeControl::task_main()
 
   	//int ret;
   	int pwm_value[6]  = {1500, 1500, 1500, 1500, 1500, 1500};
-  	double throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+  	//double throttle[6] = {-3.0, -0.5, 0.0, 0.5, 2.5, 4.5 }; //debug, for testing approximation function
+  	double throttle[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }; //debug, for testing approximation function
+
 
   	double Force[3]  = {0.0, 0.0, 0.0}; //debug, for testing 
   	double Moment[3] = {0.0, 0.0, 0.0}; //debug, for testing 
@@ -971,18 +976,37 @@ AUVAttitudeControl::task_main()
     		//Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
     		ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
 
+    		/*
+    		//Output to thrusters 
     		//Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
     		//CW: Thruster 2 and 4
-    		throttle[1] = 1.0*throttle[1];
-    		throttle[3] = 1.0*throttle[3];
+    		throttle[1] = -1.0*throttle[1];
+    		throttle[3] = -1.0*throttle[3];
                   
     		//CCW: Thruster 1, 3 and 6
-    		throttle[0] = -1.0*throttle[0];
+    		throttle[0] = +1.0*throttle[0];
+    		throttle[2] = +1.0*throttle[2];
+    		throttle[5] = +1.0*throttle[5];
+
+    		//Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
+    		throttle[4] = +1.0*throttle[4];
+
+    		*/
+
+    		//Output to thrusters 
+    		//Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
+    		//CW: Thruster 2 and 4
+    		throttle[1] = +1.0*throttle[1];
+    		throttle[3] = -1.0*throttle[3];
+                  
+    		//CCW: Thruster 1, 3 and 6
+    		throttle[0] = +1.0*throttle[0];
     		throttle[2] = -1.0*throttle[2];
-    		throttle[5] = -1.0*throttle[5];
+    		throttle[5] = +1.0*throttle[5];
 
     		//Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
     		throttle[4] = -1.0*throttle[4];
+
 
     		for (unsigned i = 0; i < 6; i++) {  
                         
