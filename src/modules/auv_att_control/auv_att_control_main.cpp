@@ -208,12 +208,15 @@ private:
 
   	int   	_armed_sub;       /**< arming status subscription */
 
-	struct  pressure_s _pressure;                      //pressure
-  	struct 	vehicle_rates_setpoint_s   _v_rates_sp;    /**< vehicle rates setpoint */
+	struct  pressure_s                   _pressure;                      //pressure
+  	struct 	vehicle_rates_setpoint_s     _v_rates_sp;    /**< vehicle rates setpoint */
   	struct  vehicle_attitude_setpoint_s  _v_att_sp; 
+  	struct  optical_flow_s               _optical_flow_p_sp; // optical_flow_pressure; //lhnguyen debug using optical_flow to send pressure data
 
   	
   	struct 	actuator_armed_s       _armed;             /**< actuator arming status */
+
+  	orb_advert_t _optical_flow_p_pub;
 
 
 
@@ -273,6 +276,7 @@ AUVAttitudeControl::AUVAttitudeControl():
   _pressure{},
   _v_rates_sp{},
   _v_att_sp{},
+  _optical_flow_p_sp{},
   _armed{},
 
   /* performance counters */
@@ -730,7 +734,8 @@ AUVAttitudeControl::depth_estimate(float dt)
     	float k2 = 100.0;//1.0;
         
     	//double u = 0.0; //depth velocity
-    	float pressure_zero_level = 1030; 
+    	//float pressure_zero_level = 1030; 
+    	float pressure_zero_level = 980;
 
 	//depth and depth velocity observator
         // x = (_pressure - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
@@ -754,7 +759,14 @@ AUVAttitudeControl::depth_estimate(float dt)
         _depth_estimated   += x_hat_dot*dt;
         _v_depth_estimated += u_hat_dot*dt; 
 
-    	PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
+    	//PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
+
+
+    	//lhnguyen debug: publish by hi-jacking optical flow message 
+    	_optical_flow_p_sp.pixel_flow_x_integral  =             _depth_estimated;          //depth
+        _optical_flow_p_sp.pixel_flow_y_integral  = (float)-1.0*_v_depth_estimated;        //depth velocity
+        orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
+
 }
 
 
@@ -796,7 +808,7 @@ AUVAttitudeControl::control_depth(float dt)
 
 	_Fcz = mass_total*(-kp*(_depth_estimated - _zr) - kd*(_v_depth_estimated - _vzr));
 
-	PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
+	//PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
 
 }
 
@@ -810,13 +822,15 @@ AUVAttitudeControl::task_main_trampoline(int argc, char *argv[])
 int
 AUVAttitudeControl::task_main()
 {
- 	 _v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
- 	 _pressure_sub   = orb_subscribe(ORB_ID(pressure));
- 	 _v_att_sp_sub 	 = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));  //for disarm
+ 	_v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+ 	_pressure_sub   = orb_subscribe(ORB_ID(pressure));
+ 	_v_att_sp_sub 	 = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));  //for disarm
+
+ 	_optical_flow_p_pub = orb_advertise(ORB_ID(optical_flow), &_optical_flow_p_sp); //  _press_topic;
 
   	/* wakeup source: gyro data from sensor selected by the sensor app */
- 	 px4_pollfd_struct_t poll_fds = {};
- 	 poll_fds.events = POLLIN;
+ 	px4_pollfd_struct_t poll_fds = {};
+ 	poll_fds.events = POLLIN;
 
   	// //subcribe to set_attitude_target topic
  	 // int vehicle_rates_setpoint_sub_fd = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
@@ -1018,7 +1032,7 @@ AUVAttitudeControl::task_main()
       			//lookup values, with values defined in kgf
       			pwm_value[i] = pwm_lookup_table((double)throttle[i]);
 
-      			PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
+      			//PX4_INFO("PWM_VALUE %d   %5d", i+1, pwm_value[i]);
       			int ret = px4_ioctl(fd, PWM_SERVO_SET(i), pwm_value[i]);       
 
       			if (ret != OK) {
