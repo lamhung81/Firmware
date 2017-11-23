@@ -161,10 +161,20 @@
 #include <uORB/topics/pressure.h>
 #include <uORB/topics/optical_flow.h>  //lhnguyen debug: low pass filter for depth and depth velocity estimation
 
+#include <math.h>
+
+#include <mathlib/mathlib.h>
+
 /////////////////////////////////////////////////////////////////////////////
 
 
 extern "C" __EXPORT int auv_att_control_main(int argc, char *argv[]);
+
+using math::Vector;
+//using math::Vector3f;
+using matrix::Vector3f;
+using math::Matrix;
+using math::Quaternion;
 
 
 class AUVAttitudeControl
@@ -196,11 +206,18 @@ private:
   	int   	_v_rates_sp_sub;    /**< vehicle rates setpoint subscription */
   	int 	_pressure_sub;      // pressure subscription
   	int     _v_att_sp_sub;
+  	int     _v_att_sub; 
+  	int      _sensor_gyro_sub;
 
 
 	float 	_vzr;
 	float   _zr;
 	float 	_Fcz;
+
+
+	float   _Gamma_c_x;
+	float   _Gamma_c_y;
+	float   _Gamma_c_z;
 
 	float 	_depth_estimated;
 	float 	_v_depth_estimated; 
@@ -212,6 +229,8 @@ private:
   	struct 	vehicle_rates_setpoint_s     _v_rates_sp;    /**< vehicle rates setpoint */
   	struct  vehicle_attitude_setpoint_s  _v_att_sp; 
   	struct  optical_flow_s               _optical_flow_p_sp; // optical_flow_pressure; //lhnguyen debug using optical_flow to send pressure data
+  	struct  vehicle_attitude_s           _v_att;
+  	struct  sensor_gyro_s                _sensor_gyro;
 
   	
   	struct 	actuator_armed_s       _armed;             /**< actuator arming status */
@@ -245,6 +264,8 @@ private:
 
   	void	control_depth(float dt);
 
+  	void    control_att(float dt);
+
   	static 	void task_main_trampoline(int argc, char *argv[]);
   	int    	task_main();     
 
@@ -277,7 +298,11 @@ AUVAttitudeControl::AUVAttitudeControl():
   _v_rates_sp{},
   _v_att_sp{},
   _optical_flow_p_sp{},
+  _v_att{},
+  _sensor_gyro{},
+
   _armed{},
+
 
   /* performance counters */
   _loop_perf(perf_alloc(PC_ELAPSED, "mc_att_control")),
@@ -812,6 +837,79 @@ AUVAttitudeControl::control_depth(float dt)
 
 }
 
+void
+AUVAttitudeControl::control_att(float dt)
+{       
+	
+	orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
+	orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
+
+	Quaternion Q_temp = _v_att.q;
+	Matrix<3, 3> R_hat    = Q_temp.to_dcm();
+
+	R_hat = R_hat.transposed();
+
+	/*
+	Vector<3> gamma = (R_hat.data[0][2],
+			   R_hat.data[1][2],
+			   R_hat.data[2][2]);
+	*/
+
+	Vector<3> e3(0.0f, 0.0f, 1.0f);
+	Vector<3> gamma = R_hat * e3;
+
+	
+	Vector<3> gamma_d (0.0f, 0.0f, 1.0f);  //Should be input from joystick
+	float omega_d = 0.0f;                  //Should be input from joystick 
+
+	//Gain
+	float k1 = 0.1f;
+	float k2 = 1.0f;
+	Matrix<3, 3> K;
+	K.zero();
+	K(0, 0) = k1;  K(1, 1) = k2;   K(2, 2) = 1.0f;
+
+
+	Vector<3> Omega_d;
+	Omega_d = (gamma_d % gamma) * k1 + gamma_d *  omega_d;
+
+
+	//PX4_INFO("Debug Omega_d: %1.6f  %1.6f  %1.6f", (double)Omega_d(0), (double)Omega_d(1), (double)Omega_d(2));
+
+	//Inerial matrix
+	Matrix<3, 3> J;
+	J.zero();
+	J(0, 0) = 0.0842f;  J(0, 1) = 0.004f;   J(0, 2) = 0.005f;
+	J(1, 0) = 0.004f;   J(1, 1) = 0.2643f;  J(1, 2) = 0.007f;
+	J(2, 0) = 0.005f;   J(2, 1) = 0.007f;   J(2, 2) = 0.3116f;
+
+	Vector<3> Omega(0.0f, 0.0f, 0.0f);   //Should read from sensor??
+	Vector<3> Omega_tilde = Omega - Omega_d; 
+
+
+	Vector<3> JOmega = J*Omega;
+	Vector3f temp (JOmega(0), JOmega(1), JOmega(2)); 
+
+	Vector3f temp1(Omega_d(0), Omega_d(1), Omega_d(2));
+	
+	Vector3f temp2; 
+	temp2 = temp.cross(temp1);
+
+	Vector<3> temp3(temp2(0), temp2(1), temp2(2));
+
+	Vector<3> Gamma_C;
+	Gamma_C = (J * K)*Omega_tilde - temp3;
+	
+	_Gamma_c_x = Gamma_C(0);
+	_Gamma_c_y = Gamma_C(1);
+ 	_Gamma_c_z = Gamma_C(2);
+
+ 	//PX4_INFO("Debug Gamma_c: %1.6f  %1.6f  %1.6f", (double)_Gamma_c_x , (double)_Gamma_c_y , (double)_Gamma_c_z );
+ 	PX4_INFO("Debug Sensor_gyro: %1.6f  %1.6f  %1.6f", (double)_sensor_gyro.x , (double)_sensor_gyro.y , (double)_sensor_gyro.z);
+}
+
+
+
 
 void
 AUVAttitudeControl::task_main_trampoline(int argc, char *argv[])
@@ -824,9 +922,16 @@ AUVAttitudeControl::task_main()
 {
  	_v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
  	_pressure_sub   = orb_subscribe(ORB_ID(pressure));
- 	_v_att_sp_sub 	 = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));  //for disarm
+ 	_v_att_sp_sub 	= orb_subscribe(ORB_ID(vehicle_attitude_setpoint));  //for disarm
+
+ 	
+ 	_v_att_sub       = orb_subscribe(ORB_ID(vehicle_attitude));
+ 	_sensor_gyro_sub = orb_subscribe(ORB_ID(sensor_gyro));
+
 
  	_optical_flow_p_pub = orb_advertise(ORB_ID(optical_flow), &_optical_flow_p_sp); //  _press_topic;
+
+
 
   	/* wakeup source: gyro data from sensor selected by the sensor app */
  	px4_pollfd_struct_t poll_fds = {};
@@ -985,6 +1090,28 @@ AUVAttitudeControl::task_main()
                         
       			/* debug lhnguyen pwm output to motors */
       			//PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ", Force[2], Moment[0], Moment[1], Moment[2]);
+
+      			//lhnguyen debug: printing quaternion
+      			orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
+      			/*
+        		PX4_INFO("Debug quaternion: %1.6f  %1.6f  %1.6f %1.6f", (double)_v_att.q[0], 
+        								        (double)_v_att.q[1],
+        								        (double)_v_att.q[2],
+        								        (double)_v_att.q[3]);
+        								        */
+      			/*
+        		Quaternion Q_temp = _v_att.q;
+        		Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
+        		PX4_INFO("Debug Euler: %1.6f  %1.6f  %1.6f ", (double)57.3*(double)Euler_angle_in_rad(0), 
+        							      (double)57.3*(double)Euler_angle_in_rad(1),
+                                                                      (double)57.3*(double)Euler_angle_in_rad(2));        
+			*/
+
+
+                        control_att(dt);                                                              
+      							
+
+
     		}
 
     		//Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
