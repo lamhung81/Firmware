@@ -479,6 +479,7 @@ public:
 		       );
 	}
 
+	/*
 	//lhnguyen debug: add new function
 	//for attitude estimation, following notion by article of Minh Duc, IEEE TOCST 2014
 	Matrix<3, 3> multiplication_aaT(void) const{
@@ -499,7 +500,7 @@ public:
 		return M;
 	}
 
-
+	*/
 
 
 
