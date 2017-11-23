@@ -790,6 +790,10 @@ AUVAttitudeControl::depth_estimate(float dt)
     	//lhnguyen debug: publish by hi-jacking optical flow message 
     	_optical_flow_p_sp.pixel_flow_x_integral  =             _depth_estimated;          //depth
         _optical_flow_p_sp.pixel_flow_y_integral  = (float)-1.0*_v_depth_estimated;        //depth velocity
+
+        _optical_flow_p_sp.timestamp = hrt_absolute_time();
+        // _replay_mode ? now : hrt_absolute_time();
+
         orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
 
 }
@@ -883,7 +887,9 @@ AUVAttitudeControl::control_att(float dt)
 	J(1, 0) = 0.004f;   J(1, 1) = 0.2643f;  J(1, 2) = 0.007f;
 	J(2, 0) = 0.005f;   J(2, 1) = 0.007f;   J(2, 2) = 0.3116f;
 
-	Vector<3> Omega(0.0f, 0.0f, 0.0f);   //Should read from sensor??
+	//Vector<3> Omega(0.0f, 0.0f, 0.0f);   //Should read from sensor??
+	Vector<3> Omega(_sensor_gyro.x, _sensor_gyro.y, _sensor_gyro.z);  
+
 	Vector<3> Omega_tilde = Omega - Omega_d; 
 
 
@@ -905,7 +911,21 @@ AUVAttitudeControl::control_att(float dt)
  	_Gamma_c_z = Gamma_C(2);
 
  	//PX4_INFO("Debug Gamma_c: %1.6f  %1.6f  %1.6f", (double)_Gamma_c_x , (double)_Gamma_c_y , (double)_Gamma_c_z );
- 	PX4_INFO("Debug Sensor_gyro: %1.6f  %1.6f  %1.6f", (double)_sensor_gyro.x , (double)_sensor_gyro.y , (double)_sensor_gyro.z);
+ 	//PX4_INFO("Debug Sensor_gyro: %1.6f  %1.6f  %1.6f", (double)_sensor_gyro.x , (double)_sensor_gyro.y , (double)_sensor_gyro.z);
+
+ 	
+
+	_optical_flow_p_sp.gyro_x_rate_integral =  _Gamma_c_x;
+	
+	_optical_flow_p_sp.gyro_y_rate_integral =  _Gamma_c_y;
+	
+	_optical_flow_p_sp.gyro_z_rate_integral =  _Gamma_c_z;
+
+	_optical_flow_p_sp.timestamp = hrt_absolute_time();
+        // _replay_mode ? now : hrt_absolute_time();
+
+        orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
+
 }
 
 
