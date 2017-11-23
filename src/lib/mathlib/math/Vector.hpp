@@ -478,6 +478,34 @@ public:
 			       data[0] * v.data[1] - data[1] * v.data[0]
 		       );
 	}
+
+	//lhnguyen debug: add new function
+	//for attitude estimation, following notion by article of Minh Duc, IEEE TOCST 2014
+	Matrix<3, 3> multiplication_aaT(void) const{
+		Matrix<3, 3> M;
+		M.data[0][0] = data[0]*data[0];  M.data[0][1] = data[0]*data[1];  M.data[0][2] = data[0]*data[2];
+		M.data[1][0] = data[1]*data[0];  M.data[1][1] = data[1]*data[1];  M.data[1][2] = data[1]*data[2];	
+		M.data[2][0] = data[2]*data[0];  M.data[2][1] = data[2]*data[1];  M.data[2][2] = data[2]*data[2];
+		return M;
+	}
+
+	//lhnguyen debug: add new function
+	//for attitude estimation, following notion by article of Minh Duc, IEEE TOCST 2014
+	Matrix<3, 3> pi_x(void) const{
+		Matrix<3, 3> M;
+		M.data[0][0] = data[1]*data[1] + data[2]*data[2];  M.data[0][1] =-data[0]*data[1];                  M.data[0][2] =-data[0]*data[2];
+		M.data[1][0] = data[1]*data[0];                    M.data[1][1] = data[0]*data[0]+data[2]*data[2];  M.data[1][2] = data[1]*data[2];	
+		M.data[2][0] =-data[2]*data[0];                    M.data[2][1] =-data[2]*data[1];                  M.data[2][2] = data[0]*data[0]+data[1]*data[1];
+		return M;
+	}
+
+
+
+
+
+
+
+
 };
 
 template <>

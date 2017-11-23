@@ -220,7 +220,7 @@ AttitudeEstimatorQ::AttitudeEstimatorQ() :
 	_params_handles.acc_comp	= param_find("ATT_ACC_COMP");
 	_params_handles.bias_max	= param_find("ATT_BIAS_MAX");
 	_params_handles.ext_hdg_mode	= param_find("ATT_EXT_HDG_M");
-	_params_handles.airspeed_mode = param_find("FW_ARSP_MODE");
+	_params_handles.airspeed_mode   = param_find("FW_ARSP_MODE");
 }
 
 /**
