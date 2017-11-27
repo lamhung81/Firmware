@@ -153,6 +153,8 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/sensor_correction.h>
 #include <uORB/topics/sensor_gyro.h>
+#include <uORB/topics/sensor_combined.h>
+
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
@@ -160,6 +162,7 @@
 #include <uORB/uORB.h>
 #include <uORB/topics/pressure.h>
 #include <uORB/topics/optical_flow.h>  //lhnguyen debug: low pass filter for depth and depth velocity estimation
+
 
 #include <math.h>
 
@@ -207,9 +210,9 @@ private:
   	int 	_pressure_sub;      // pressure subscription
   	int     _v_att_sp_sub;
   	int     _v_att_sub; 
-  	int      _sensor_gyro_sub;
-
-
+  	//int     _sensor_gyro_sub;
+  	int     _sensor_combined_sub;
+  	
 	float 	_vzr;
 	float   _zr;
 	float 	_Fcz;
@@ -230,7 +233,10 @@ private:
   	struct  vehicle_attitude_setpoint_s  _v_att_sp; 
   	struct  optical_flow_s               _optical_flow_p_sp; // optical_flow_pressure; //lhnguyen debug using optical_flow to send pressure data
   	struct  vehicle_attitude_s           _v_att;
-  	struct  sensor_gyro_s                _sensor_gyro;
+  	//struct  sensor_gyro_s                _sensor_gyro;
+  	struct  sensor_combined_s            _sensor_combined;
+  	
+  	
 
   	
   	struct 	actuator_armed_s       _armed;             /**< actuator arming status */
@@ -299,8 +305,10 @@ AUVAttitudeControl::AUVAttitudeControl():
   _v_att_sp{},
   _optical_flow_p_sp{},
   _v_att{},
-  _sensor_gyro{},
+  //_sensor_gyro{},
+  _sensor_combined{},
 
+  
   _armed{},
 
 
@@ -786,16 +794,16 @@ AUVAttitudeControl::depth_estimate(float dt)
 
     	//PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
 
-
+        /*
     	//lhnguyen debug: publish by hi-jacking optical flow message 
     	_optical_flow_p_sp.pixel_flow_x_integral  =             _depth_estimated;          //depth
-        _optical_flow_p_sp.pixel_flow_y_integral  = (float)-1.0*_v_depth_estimated;        //depth velocity
+        _optical_flow_p_sp.pixel_flow_y_integral  =       -1.0f*_v_depth_estimated;        //depth velocity
 
         _optical_flow_p_sp.timestamp = hrt_absolute_time();
         // _replay_mode ? now : hrt_absolute_time();
-
+	
         orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
-
+	*/
 }
 
 
@@ -803,10 +811,13 @@ void
 AUVAttitudeControl::control_depth(float dt)
 {       
 	
-      
+      	/*
 	//vehicle_rates_setpoint_poll();  //lhnguyen: ko lam viec
 	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 	_vzr =(float)-1.0*_v_rates_sp.thrust;  
+	*/
+
+	_vzr = 0.0f;
 
 	//Apply deadband
 	_vzr = joystick_deadband(_vzr,0.1);
@@ -846,10 +857,28 @@ AUVAttitudeControl::control_att(float dt)
 {       
 	
 	orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
-	orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
+	
+	//orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
+	orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
+	
+	//For referent angular velocites and thrust
+	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+
+
+
 
 	Quaternion Q_temp = _v_att.q;
 	Matrix<3, 3> R_hat    = Q_temp.to_dcm();
+
+
+	Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
+       /*
+        PX4_INFO("Debug Euler: %1.6f  %1.6f  %1.6f ", (double)57.3*(double)Euler_angle_in_rad(0), 
+        							      (double)57.3*(double)Euler_angle_in_rad(1),
+                                                                      (double)57.3*(double)Euler_angle_in_rad(2));    
+
+	*/
+
 
 	R_hat = R_hat.transposed();
 
@@ -864,17 +893,40 @@ AUVAttitudeControl::control_att(float dt)
 
 	
 	Vector<3> gamma_d (0.0f, 0.0f, 1.0f);  //Should be input from joystick
-	float omega_d = 0.0f;                  //Should be input from joystick 
+	float omega_d = 0.0f;                  //Should be input from joystick
+	
+	//lhnguyen debug: Becareful about sign of components of gamma_d
+	//nghieng max 30 deg -> magnitude 0.5 
+	gamma_d(0) = -0.5f*joystick_deadband(_v_rates_sp.roll ,0.2);
+	gamma_d(1) = -0.5f*joystick_deadband(_v_rates_sp.pitch,0.2);
+	gamma_d(2) = sqrt(1.0f - gamma_d(0)*gamma_d(0) - gamma_d(1)*gamma_d(1));
+
+	//max yaw_angular_velocity = pi/12
+	omega_d    = 0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
+
+	/*
+        	//lhnguyen debug: Quaternion defined from joystick
+        	_optical_flow_p_sp.pixel_flow_x_integral  =          gamma_d(0)   ;//         _v_att_sp.q_d[0];          
+        	_optical_flow_p_sp.pixel_flow_y_integral  =    -1.0f*gamma_d(1)   ;//-1.0f*_v_att_sp.q_d[1];
+        	_optical_flow_p_sp.gyro_x_rate_integral =            gamma_d(2)   ;//     _v_att_sp.q_d[2];
+		_optical_flow_p_sp.gyro_y_rate_integral =      -1.0f*omega_d      ;//-1.0f*        _v_att_sp.q_d[3];
+	
+		_optical_flow_p_sp.timestamp = hrt_absolute_time();
+        	
+        	orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
+	
+	*/
 
 	//Gain
-	float k1 = 0.1f;
-	float k2 = 1.0f;
+	float k1 = 0.5f; //0.1f;
+	float k2 = 1.5f; //1.0f;
 	Matrix<3, 3> K;
 	K.zero();
 	K(0, 0) = k1;  K(1, 1) = k2;   K(2, 2) = 1.0f;
 
 
 	Vector<3> Omega_d;
+	//In order: Vector and then scalar value, for multiplication 
 	Omega_d = (gamma_d % gamma) * k1 + gamma_d *  omega_d;
 
 
@@ -888,7 +940,9 @@ AUVAttitudeControl::control_att(float dt)
 	J(2, 0) = 0.005f;   J(2, 1) = 0.007f;   J(2, 2) = 0.3116f;
 
 	//Vector<3> Omega(0.0f, 0.0f, 0.0f);   //Should read from sensor??
-	Vector<3> Omega(_sensor_gyro.x, _sensor_gyro.y, _sensor_gyro.z);  
+	//Vector<3> Omega(_sensor_gyro.x, _sensor_gyro.y, _sensor_gyro.z);                                          //from sensor_gyro directly
+	Vector<3> Omega(_sensor_combined.gyro_rad[0], _sensor_combined.gyro_rad[1], _sensor_combined.gyro_rad[2]);  //From sensor_combined with average value
+	
 
 	Vector<3> Omega_tilde = Omega - Omega_d; 
 
@@ -904,7 +958,7 @@ AUVAttitudeControl::control_att(float dt)
 	Vector<3> temp3(temp2(0), temp2(1), temp2(2));
 
 	Vector<3> Gamma_C;
-	Gamma_C = (J * K)*Omega_tilde - temp3;
+	Gamma_C = -(J * K)*Omega_tilde - temp3;
 	
 	_Gamma_c_x = Gamma_C(0);
 	_Gamma_c_y = Gamma_C(1);
@@ -913,13 +967,13 @@ AUVAttitudeControl::control_att(float dt)
  	//PX4_INFO("Debug Gamma_c: %1.6f  %1.6f  %1.6f", (double)_Gamma_c_x , (double)_Gamma_c_y , (double)_Gamma_c_z );
  	//PX4_INFO("Debug Sensor_gyro: %1.6f  %1.6f  %1.6f", (double)_sensor_gyro.x , (double)_sensor_gyro.y , (double)_sensor_gyro.z);
 
- 	
-
-	_optical_flow_p_sp.gyro_x_rate_integral =  _Gamma_c_x;
+ 	/*
+ 	//For debugging
+	_optical_flow_p_sp.gyro_x_rate_integral =  _sensor_combined.gyro_rad[0];//+57.3f * Euler_angle_in_rad(0); //_Gamma_c_x;
 	
-	_optical_flow_p_sp.gyro_y_rate_integral =  _Gamma_c_y;
+	_optical_flow_p_sp.gyro_y_rate_integral = -_sensor_combined.gyro_rad[1];//-57.3f * Euler_angle_in_rad(1); //_Gamma_c_y;
 	
-	_optical_flow_p_sp.gyro_z_rate_integral =  _Gamma_c_z;
+	_optical_flow_p_sp.gyro_z_rate_integral = -_sensor_combined.gyro_rad[2];//-57.3f * Euler_angle_in_rad(2); // _Gamma_c_z;
 
 	_optical_flow_p_sp.timestamp = hrt_absolute_time();
         // _replay_mode ? now : hrt_absolute_time();
@@ -927,6 +981,23 @@ AUVAttitudeControl::control_att(float dt)
         orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
 
         //Test commit
+        */
+
+ 	/*
+ 	//For debugging
+	_optical_flow_p_sp.gyro_x_rate_integral =   _Gamma_c_x;
+	
+	_optical_flow_p_sp.gyro_y_rate_integral = - _Gamma_c_y;
+	
+	_optical_flow_p_sp.gyro_z_rate_integral = - _Gamma_c_z;
+
+	_optical_flow_p_sp.timestamp = hrt_absolute_time();
+       
+
+        orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
+
+	*/
+
 
 }
 
@@ -947,8 +1018,12 @@ AUVAttitudeControl::task_main()
  	_v_att_sp_sub 	= orb_subscribe(ORB_ID(vehicle_attitude_setpoint));  //for disarm
 
  	
+ 	
  	_v_att_sub       = orb_subscribe(ORB_ID(vehicle_attitude));
- 	_sensor_gyro_sub = orb_subscribe(ORB_ID(sensor_gyro));
+
+
+ 	//_sensor_gyro_sub = orb_subscribe(ORB_ID(sensor_gyro));
+ 	_sensor_combined_sub = orb_subscribe(ORB_ID(sensor_combined));
 
 
  	_optical_flow_p_pub = orb_advertise(ORB_ID(optical_flow), &_optical_flow_p_sp); //  _press_topic;
@@ -1004,7 +1079,26 @@ AUVAttitudeControl::task_main()
         	//copy sensors raw data into local buffer
         	//orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &raw_att);
         	orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
-        	if (_v_att_sp.q_d[1] < (float)-0.98) {
+
+        	
+        	
+
+        	/*
+        	//lhnguyen debug: Quaternion defined from joystick
+        	_optical_flow_p_sp.pixel_flow_x_integral  =           _v_att_sp.q_d[0];          
+        	_optical_flow_p_sp.pixel_flow_y_integral  =     -1.0f*_v_att_sp.q_d[1];
+        	_optical_flow_p_sp.gyro_x_rate_integral =             _v_att_sp.q_d[2];
+		_optical_flow_p_sp.gyro_y_rate_integral =       -1.0f*_v_att_sp.q_d[3];
+	
+		_optical_flow_p_sp.timestamp = hrt_absolute_time();        	
+        	orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
+        	*/
+		
+
+        	// end of lhnguyen debug: Quaternion defined from joystick
+
+        	/*
+        	if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] < -0.5f))  {
     			PX4_INFO("Emergency stop from joystick");
 
     			//lhnguyen debug: disarm to pwm = 1500 uc
@@ -1023,8 +1117,8 @@ AUVAttitudeControl::task_main()
      	 		continue;
 
     		}
-
-
+		*/
+		
 
     		/* this is undesirable but not much we can do - might want to flag unhappy status */
    		if (pret < 0) {
@@ -1092,6 +1186,7 @@ AUVAttitudeControl::task_main()
         		raw.yaw   = joystick_deadband(raw.yaw,0.1);
         		raw.thrust= joystick_deadband(raw.thrust,0.1);
 
+        		//Depth control, calculate _Fcz
         		control_depth(dt);
         		//PX4_INFO("Debug depth: %1.6f  %1.6f ", (double)_zr, (double)_vzr);
 
@@ -1103,34 +1198,23 @@ AUVAttitudeControl::task_main()
       			// Moment[1] =  (float)2.0*raw.pitch;    
       			// Moment[2] =  (float)2.0*raw.yaw;   
 
-      			Force[0]  =  (float)0.0;
-      			Force[1]  =  (float)0.0; 
-      			Force[2]  =  _Fcz;
-      			Moment[0] =  (float)0.0;   
-      			Moment[1] =  (float)0.0;    
-      			Moment[2] =  (float)0.0;  
+			//Attitude control, calculate _Gamma_c_x, _Gamma_c_y, _Gamma_c_z
+			control_att(dt); 
+
+      			Force[0]  =  0.0f;
+      			Force[1]  =  0.0f; 
+      			Force[2]  =  0.0f*_Fcz;
+      			Moment[0] =  1.0f*_Gamma_c_x;   
+      			Moment[1] =  1.0f*_Gamma_c_y;    
+      			Moment[2] =  1.0f*_Gamma_c_z;  
                         
       			/* debug lhnguyen pwm output to motors */
       			//PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ", Force[2], Moment[0], Moment[1], Moment[2]);
 
-      			//lhnguyen debug: printing quaternion
-      			orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
-      			/*
-        		PX4_INFO("Debug quaternion: %1.6f  %1.6f  %1.6f %1.6f", (double)_v_att.q[0], 
-        								        (double)_v_att.q[1],
-        								        (double)_v_att.q[2],
-        								        (double)_v_att.q[3]);
-        								        */
-      			/*
-        		Quaternion Q_temp = _v_att.q;
-        		Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
-        		PX4_INFO("Debug Euler: %1.6f  %1.6f  %1.6f ", (double)57.3*(double)Euler_angle_in_rad(0), 
-        							      (double)57.3*(double)Euler_angle_in_rad(1),
-                                                                      (double)57.3*(double)Euler_angle_in_rad(2));        
-			*/
+      			
 
 
-                        control_att(dt);                                                              
+                                                                                     
       							
 
 
@@ -1159,17 +1243,33 @@ AUVAttitudeControl::task_main()
     		//Output to thrusters 
     		//Taking into account CW (Clock Wise) or CCW (Counter Clock Wise) directions
     		//CW: Thruster 2 and 4
-    		throttle[1] = +1.0*throttle[1];
-    		throttle[3] = -1.0*throttle[3];
+    		throttle[1] =      throttle[1];
+    		throttle[3] = +1.0*throttle[3]; //Throttle 4
                   
     		//CCW: Thruster 1, 3 and 6
-    		throttle[0] = +1.0*throttle[0];
-    		throttle[2] = -1.0*throttle[2];
-    		throttle[5] = +1.0*throttle[5];
+    		throttle[0] =      throttle[0];
+    		throttle[2] = +1.0*throttle[2]; //Throttle 3 
+    		throttle[5] =      throttle[5];
 
     		//Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
-    		throttle[4] = -1.0*throttle[4];
+    		throttle[4] = +1.0*throttle[4]; //Throttle 5
 
+
+        	//lhnguyen debug: Send throttle
+        	_optical_flow_p_sp.pixel_flow_x_integral  =         throttle[0]   ;//           
+        	_optical_flow_p_sp.pixel_flow_y_integral  =    -1.0*throttle[1]   ;//
+        	_optical_flow_p_sp.gyro_x_rate_integral   =         throttle[2]   ;//   
+		_optical_flow_p_sp.gyro_y_rate_integral   =    -1.0*throttle[3]   ;//
+		_optical_flow_p_sp.gyro_z_rate_integral   =    -1.0*throttle[4]   ;
+		_optical_flow_p_sp.ground_distance_m      =         throttle[5]   ;
+	
+		_optical_flow_p_sp.timestamp = hrt_absolute_time();
+
+
+        	
+        	orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
+        	
+		
 
     		for (unsigned i = 0; i < 6; i++) {  
                         
@@ -1192,7 +1292,7 @@ AUVAttitudeControl::task_main()
 
    	 	#ifdef __PX4_NUTTX
       		/* Trigger all timer's channels in Oneshot mode to fire
-     	 	* the oneshots with updated values.
+     	 	* the oneshots with updated values.	
       		*/
       		up_pwm_update();
     		#endif
