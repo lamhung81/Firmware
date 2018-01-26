@@ -31,23 +31,23 @@ set(config_module_list
 	drivers/sf0x
 	drivers/ll40ls
 	drivers/trone
-	drivers/gps
+	drivers/gps					
 	drivers/pwm_out_sim
 	#drivers/hott
 	#drivers/hott/hott_telemetry
 	#drivers/hott/hott_sensors
 	#drivers/blinkm
-	drivers/airspeed
-	drivers/ets_airspeed
-	drivers/meas_airspeed
-	drivers/frsky_telemetry
+	drivers/airspeed 				
+	drivers/ets_airspeed 				
+	drivers/meas_airspeed 				
+	drivers/frsky_telemetry 			
 	modules/sensors
 	#drivers/mkblctrl
-	drivers/px4flow
+	drivers/px4flow				
 	#drivers/oreoled
 	drivers/vmount
 	drivers/pwm_input
-	drivers/camera_trigger
+	drivers/camera_trigger 			
 	drivers/bst
 	#drivers/snapdragon_rc_pwm
 	drivers/lis3mdl
@@ -99,7 +99,7 @@ set(config_module_list
 	modules/mavlink
 	modules/gpio_led
 	#modules/uavcan
-	modules/land_detector
+	modules/land_detector 				
 	#modules/raw_pressure  #debug lhnguyen
 
 	#
