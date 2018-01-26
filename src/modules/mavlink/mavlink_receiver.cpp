@@ -144,6 +144,7 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_offboard_control_mode{},
 	_att_sp{},
 	_rates_sp{},
+	//_manual_sp{},
 	_time_offset_avg_alpha(0.8),
 	_time_offset(0),
 	_orb_class_instance(-1),
@@ -1874,6 +1875,88 @@ MavlinkReceiver::handle_message_manual_control(mavlink_message_t *msg)
 	mavlink_manual_control_t man;
 	mavlink_msg_manual_control_decode(msg, &man);
 
+/*
+	//debug lhnguyen
+
+
+		_manual_sp.timestamp = hrt_absolute_time();
+
+						_manual_sp.x = man.x; // man.x / 1000.0f;
+						_manual_sp.y = man.y; // man.y / 1000.0f;
+						_manual_sp.r = man.r; // man.r / 1000.0f;
+						_manual_sp.z = man.z; // man.z / 1000.0f;
+	        PX4_INFO("Debug mavlink3: % 1.6f % 1.6f ", 
+							(double)_manual_sp.x, 
+							(double)_manual_sp.y);
+		
+		_manual_sp.data_source = manual_control_setpoint_s::SOURCE_MAVLINK_0 + _mavlink->get_instance_id();
+
+		int m_inst;
+		orb_publish_auto(ORB_ID(manual_control_setpoint), &_manual_pub, &_manual_sp, &m_inst, ORB_PRIO_LOW);
+*/
+	/*
+	static uint8_t flag = 0x0; 
+	bool tignore_manual = (bool)(man.type_mask & (1 << 7));
+	if (!tignore_manual) { // only copy att rates sp if message contained new data
+						//_att_sp.q_d[0] = set_attitude_target.q[0];;
+						//_att_sp.q_d[1] = set_attitude_target.q[1];
+						//_att_sp.q_d[2] = set_attitude_target.q[2];
+						//_att_sp.q_d[3] = set_attitude_target.q[3];
+
+						_manual_sp.x = man.x; // man.x / 1000.0f;
+						_manual_sp.y = man.y; // man.y / 1000.0f;
+						_manual_sp.r = man.r; // man.r / 1000.0f;
+						_manual_sp.z = man.z; // man.z / 1000.0f;
+
+
+						//
+						PX4_INFO("Debug mavlink3: % 1.6f % 1.6f ", 
+							(double)set_attitude_target.q[0], 
+							(double)set_attitude_target.q[1]);
+						//
+
+		flag |= 0xf; 
+		//PX4_INFO("Debug flag = 0x%x", flag);
+	}
+
+	if (_att_sp_pub == nullptr) {
+		_att_sp_pub = orb_advertise(ORB_ID(manual_control_setpoint), &_manual_sp);
+
+	} else {
+
+		//PX4_INFO("Debug flag = 0x%x", flag);
+
+		if (flag == 0xf) { 
+			// lhnguyen: uncomment for printing values
+
+			//
+			PX4_INFO("Debug mavlink2: % 1.6f % 1.6f ", 
+				(double)_att_sp.q_d[0], 
+				(double)_att_sp.q_d[1]);
+			//
+
+			orb_publish(ORB_ID(manual_control_setpoint), _manual_pub, &_manual_sp);
+			flag = 0x0;
+		}
+	}
+         */
+
+	/*
+        //debug lhnguyen
+	_manual_sp.timestamp = hrt_absolute_time();
+	_manual_sp.x = man.x; // man.x / 1000.0f;
+	_manual_sp.y = man.y; // man.y / 1000.0f;
+	_manual_sp.r = man.r; // man.r / 1000.0f;
+	_manual_sp.z = man.z; // man.z / 1000.0f;
+	_manual_sp.data_source = manual_control_setpoint_s::SOURCE_MAVLINK_0 + _mavlink->get_instance_id();
+
+	//int m_inst;
+	orb_publish(ORB_ID(manual_control_setpoint), &_manual_pub, &_manual_sp);
+	*/
+		
+
+
+
 	// Check target
 	if (man.target != 0 && man.target != _mavlink->get_system_id()) {
 		return;
@@ -1894,16 +1977,16 @@ MavlinkReceiver::handle_message_manual_control(mavlink_message_t *msg)
 		rc.input_source = input_rc_s::RC_INPUT_SOURCE_MAVLINK;
 		rc.rssi = RC_INPUT_RSSI_MAX;
 
-		/* roll */
+		// roll 
 		rc.values[0] = man.x / 2 + 1500;
-		/* pitch */
+		// pitch 
 		rc.values[1] = man.y / 2 + 1500;
-		/* yaw */
+		// yaw 
 		rc.values[2] = man.r / 2 + 1500;
-		/* throttle */
+		// throttle 
 		rc.values[3] = fminf(fmaxf(man.z / 0.9f + 800, 1000.0f), 2000.0f);
 
-		/* decode all switches which fit into the channel mask */
+		// decode all switches which fit into the channel mask 
 		unsigned max_switch = (sizeof(man.buttons) * 8);
 		unsigned max_channels = (sizeof(rc.values) / sizeof(rc.values[0]));
 
@@ -1911,7 +1994,7 @@ MavlinkReceiver::handle_message_manual_control(mavlink_message_t *msg)
 			max_switch = (max_channels - 4);
 		}
 
-		/* fill all channels */
+		// fill all channels 
 		for (unsigned i = 0; i < max_switch; i++) {
 			rc.values[i + 4] = decode_switch_pos_n(man.buttons, i);
 		}
@@ -1938,6 +2021,7 @@ MavlinkReceiver::handle_message_manual_control(mavlink_message_t *msg)
 		int m_inst;
 		orb_publish_auto(ORB_ID(manual_control_setpoint), &_manual_pub, &manual, &m_inst, ORB_PRIO_LOW);
 	}
+	
 }
 
 void

@@ -162,6 +162,7 @@
 #include <uORB/uORB.h>
 #include <uORB/topics/pressure.h>
 #include <uORB/topics/optical_flow.h>  //lhnguyen debug: low pass filter for depth and depth velocity estimation
+#include <uORB/topics/manual_control_setpoint.h>
 
 
 #include <math.h>
@@ -212,6 +213,7 @@ private:
   	int     _v_att_sub; 
   	//int     _sensor_gyro_sub;
   	int     _sensor_combined_sub;
+    int     _manual_control_sp_sub;
   	
 	float 	_vzr;
 	float   _zr;
@@ -236,7 +238,7 @@ private:
   	struct  vehicle_attitude_s           _v_att;
   	//struct  sensor_gyro_s                _sensor_gyro;
   	struct  sensor_combined_s            _sensor_combined;
-  	
+  	struct  manual_control_setpoint_s    _manual_control_sp;
   	
 
   	
@@ -313,7 +315,7 @@ AUVAttitudeControl::AUVAttitudeControl():
   _v_att{},
   //_sensor_gyro{},
   _sensor_combined{},
-
+  _manual_control_sp{},
   
   _armed{},
 
@@ -774,6 +776,10 @@ float AUVAttitudeControl::joystick_deadband(float joystick_value, float joystick
        
 // }
 
+
+
+
+
 void
 AUVAttitudeControl::vehicle_rates_setpoint_poll()
 {
@@ -812,7 +818,19 @@ AUVAttitudeControl::pressure_poll()
 }
 
 
-
+/*
+void
+AUVAttitudeControl::manual_control_setpoint_poll()
+{
+  // check if there is a new setpoint 
+  bool updated;
+  orb_check(_manual_control_sp_sub, &updated);
+auv_att_control
+  if (updated) {
+    orb_copy(ORB_ID(manual_control_setpoint), _manual_control_sp_sub, &_manual_control_sp);
+  }
+}
+*/
 
 void
 AUVAttitudeControl::depth_estimate(float dt)
@@ -822,7 +840,7 @@ AUVAttitudeControl::depth_estimate(float dt)
         
     	//double u = 0.0; //depth velocity
     	//float pressure_zero_level = 1030; 
-    	float pressure_zero_level = 980;
+    	float pressure_zero_level = 1027.0; //980;
 
 	//depth and depth velocity observator
         // x = (_pressure - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
@@ -864,17 +882,56 @@ AUVAttitudeControl::depth_estimate(float dt)
 void
 AUVAttitudeControl::control_depth(float dt)
 {       
+
+  /*
+  orb_copy(ORB_ID(manual_control_setpoint), _manual_control_sp_sub, &_manual_control_sp);
+
+  float gia_tri = (float)1.0 * _manual_control_sp.x;
+  PX4_INFO("Debug gui gia tri: %1.6f  ", (double)gia_tri);
 	
+  _vzr = gia_tri;
+  */
       	/*
 	//vehicle_rates_setpoint_poll();  //lhnguyen: ko lam viec
 	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 	_vzr =(float)-1.0*_v_rates_sp.thrust;  
 	*/
 
-	_vzr = 0.0f;
+  orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
+  if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] > -0.5f) ) {
+
+          //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
+          _vzr =            (float)1.0; //  _v_att_sp.q_d[0];
+
+          }
+
+  if ((_v_att_sp.q_d[0] > -0.5f) && (_v_att_sp.q_d[3] < -0.5f) ) {
+
+          //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
+          _vzr =(float) -1.0; //(float)-1.0* _v_att_sp.q_d[0];
+
+          }
+   if ((_v_att_sp.q_d[0] > -0.5f) && (_v_att_sp.q_d[3] > -0.5f) ) {
+
+          //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
+          _vzr =              (float) 0.0;
+
+          }
+
+   if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] < -0.5f) ) {
+
+          //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
+          _vzr =              (float) 0.0;
+
+          }
+
+   //PX4_INFO("Reference depth velocity  %1.6f ", (double) _vzr );
+	
+
+  //_vzr = 0.0f;
 
 	//Apply deadband
-	_vzr = joystick_deadband(_vzr,0.1);
+	//_vzr = joystick_deadband(_vzr,0.1);
 
 	// choose 0.1 for smaller reference depth velocity input from joystick
 	_vzr = (float)0.1*_vzr;
@@ -888,15 +945,15 @@ AUVAttitudeControl::control_depth(float dt)
 		_vzr = (float) 0.0;
 	} 
 
-	if (_zr >= (float)0.6) {
-		_zr = (float) 0.6;
+	if (_zr >= (float)1.2) {
+		_zr = (float) 1.2;
 		_vzr = (float) 0.0;
 	}
 
 	//Control gains
-	float kp = 2.0;
+	float kp = 2.0; //3.0;
 	float kd = 1.0;
-	float mass_total = 11.62 ; 
+	float mass_total =17.0; // 11.62 ; 
 
 	depth_estimate(dt);
 
@@ -986,14 +1043,14 @@ AUVAttitudeControl::control_att(float dt)
         	orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
 	*/
 	
-  _Fcx = joystick_deadband(_v_rates_sp.thrust ,0.2);
+  _Fcx = 3.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
 
 
 
 
 	//Gain
 	float k1 = 0.8f; //0.5f; //0.1f;
-	float k2 = 5.0f; //2.0f; //1.0f;
+	float k2 = 7.0f; //2.0f; //1.0f;
 	Matrix<3, 3> K;
 	K.zero();
 	K(0, 0) = k2;  K(1, 1) = k2;   K(2, 2) = 1.5f;
@@ -1152,7 +1209,7 @@ AUVAttitudeControl::task_main()
         	//memset(&raw_att, 0, sizeof(raw_att));
         	//copy sensors raw data into local buffer
         	//orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &raw_att);
-        	orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
+        	//orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
 
         	
         	
@@ -1170,10 +1227,28 @@ AUVAttitudeControl::task_main()
 		
 
         	// end of lhnguyen debug: Quaternion defined from joystick
+          //PX4_INFO("Emergency stop from joystick 1 %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double)_v_att_sp.q_d[3] );
 
-        	/*
+
+/*
+          if ((_v_att_sp.q_d[0] < -0.5f) ) {
+          PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
+          }
+
+          if ((_v_att_sp.q_d[0] > 0.5f) ) {
+          PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
+          }
+*/
+          /*
+        	 
         	if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] < -0.5f))  {
-    			PX4_INFO("Emergency stop from joystick");
+    			PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
+          }
+         
+
+          
+
+
 
     			//lhnguyen debug: disarm to pwm = 1500 uc
     			for (unsigned i = 0; i < 6; i++) {                          
@@ -1279,7 +1354,7 @@ AUVAttitudeControl::task_main()
 
       			Force[0]  =  1.0f*_Fcx;
       			Force[1]  =  0.0f; 
-      			Force[2]  =  0.0f*_Fcz;
+      			Force[2]  =  1.0f*_Fcz;
       			Moment[0] =  1.0f*_Gamma_c_x;   
       			Moment[1] =  1.0f*_Gamma_c_y;    
       			Moment[2] =  1.0f*_Gamma_c_z;  
