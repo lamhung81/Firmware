@@ -218,7 +218,10 @@ private:
 	float 	_vzr;
 	float   _zr;
   float   _Fcx;
+  float   _Fcy;
 	float 	_Fcz;
+  float   _Fcx_manual;
+  float   _z_depth;
 
 
 	float   _Gamma_c_x;
@@ -278,6 +281,8 @@ private:
   	static 	void task_main_trampoline(int argc, char *argv[]);
   	int    	task_main();     
 
+    float satFunction(float x, float delta_x);
+
 
 };
 
@@ -297,7 +302,10 @@ AUVAttitudeControl::AUVAttitudeControl():
   _vzr(5.0),
   _zr(0.0),
   _Fcx(0.0),
+  _Fcy(0.0),
   _Fcz(0.0),
+  _Fcx_manual(0.0),
+  _z_depth(0.0),
 
   _Gamma_c_x(0.0f),
   _Gamma_c_y(0.0f),
@@ -950,6 +958,9 @@ AUVAttitudeControl::control_depth(float dt)
 		_vzr = (float) 0.0;
 	}
 
+  /* 
+  //Control without integrator
+
 	//Control gains
 	float kp = 2.0; //3.0;
 	float kd = 1.0;
@@ -960,8 +971,73 @@ AUVAttitudeControl::control_depth(float dt)
 	_Fcz = mass_total*(-kp*(_depth_estimated - _zr) - kd*(_v_depth_estimated - _vzr));
 
 	//PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
+  */
+
+  //Control with integrator
+  depth_estimate(dt);
+  float h_tilde  = _depth_estimated - _zr;
+  float hr_dot   = 0.0; //_vzr; because the joystick do not give the good value by using two buttons as above
+  float k1_depth = 1.0;
+
+  float vzd = - k1_depth* h_tilde + hr_dot;
+
+  float vzd_dot = 0.0; // = - k1_depth* (_v_depth_estimated - hr_dot) + hr_ddot; //hr_ddot = 0;
+
+  float k2_depth      = 1.4142;
+  float delta_z_depth = 0.8;
+  float kz_depth      = 2.0;
+
+  float vz_tilde    = _v_depth_estimated - vzd;
+  float vz_bar      = vz_tilde + _z_depth;
+  float z_depth_dot = kz_depth*(-_z_depth + satFunction(vz_bar, delta_z_depth));
+
+  float Fcz_Inertial = 19.0f* (vzd_dot + satFunction(-k2_depth*vz_bar,0.5) - z_depth_dot);  //mz = 19.0 kg
+
+
+
+
+
+  orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
+  
+  //orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
+  orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
+  
+  //For referent angular velocites and thrust
+  orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+
+
+  Quaternion Q_temp = _v_att.q;
+  Matrix<3, 3> R_hat    = Q_temp.to_dcm();
+
+  Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
+ 
+  R_hat = R_hat.transposed();
+
+  Vector<3> e3(0.0f, 0.0f, 1.0f);
+  Vector<3> gamma = R_hat * e3;
+
+  //Fc_Intertial = (0.0f, 0.0f, Fcz_Inertial) = e3*Fcz_Inertial;
+  Vector<3> Fc_body = gamma*Fcz_Inertial;
+  _Fcx = Fc_body(0);
+  _Fcy = Fc_body(1);
+  _Fcz = Fc_body(2);
 
 }
+
+float AUVAttitudeControl::satFunction(float x, float delta_x)
+{
+  if (x > delta_x) {
+    return delta_x;
+  }
+  else if (x < -delta_x){
+    return -delta_x;
+  }
+  else{
+    return x;
+  }
+
+}
+
 
 void
 AUVAttitudeControl::control_att(float dt)
@@ -1043,7 +1119,7 @@ AUVAttitudeControl::control_att(float dt)
         	orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
 	*/
 	
-  _Fcx = 3.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
+  _Fcx_manual = 4.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
 
 
 
@@ -1066,9 +1142,17 @@ AUVAttitudeControl::control_att(float dt)
 	//Inerial matrix
 	Matrix<3, 3> J;
 	J.zero();
-	J(0, 0) = 0.0842f;  J(0, 1) = 0.004f;   J(0, 2) = 0.005f;
-	J(1, 0) = 0.004f;   J(1, 1) = 0.2643f;  J(1, 2) = 0.007f;
-	J(2, 0) = 0.005f;   J(2, 1) = 0.007f;   J(2, 2) = 0.3116f;
+	//J(0, 0) = 0.0842f;  J(0, 1) = 0.004f;   J(0, 2) = 0.005f;
+	//J(1, 0) = 0.004f;   J(1, 1) = 0.2643f;  J(1, 2) = 0.007f;
+	//J(2, 0) = 0.005f;   J(2, 1) = 0.007f;   J(2, 2) = 0.3116f;
+
+  //For New-BlueROV1
+  J(0, 0) = 0.12242f;  J(0, 1) = 0.004f;   J(0, 2) = 0.005f;
+  J(1, 0) = 0.004f;    J(1, 1) = 0.3516f;  J(1, 2) = 0.007f;
+  J(2, 0) = 0.005f;    J(2, 1) = 0.007f;   J(2, 2) = 0.3448f;
+
+
+
 
 	//Vector<3> Omega(0.0f, 0.0f, 0.0f);   //Should read from sensor??
 	//Vector<3> Omega(_sensor_gyro.x, _sensor_gyro.y, _sensor_gyro.z);                                          //from sensor_gyro directly
@@ -1352,8 +1436,8 @@ AUVAttitudeControl::task_main()
 			//Attitude control, calculate _Gamma_c_x, _Gamma_c_y, _Gamma_c_z
 			control_att(dt); 
 
-      			Force[0]  =  1.0f*_Fcx;
-      			Force[1]  =  0.0f; 
+      			Force[0]  =  1.0f*_Fcx + 1.0f*_Fcx_manual;
+      			Force[1]  =  1.0f*_Fcy; 
       			Force[2]  =  1.0f*_Fcz;
       			Moment[0] =  1.0f*_Gamma_c_x;   
       			Moment[1] =  1.0f*_Gamma_c_y;    
