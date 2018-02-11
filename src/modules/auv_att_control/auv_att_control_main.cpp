@@ -1,84 +1,4 @@
-/****************************************************************************
- *
- *   Copyright (c) 2013-2017 PX4 Development Team. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name PX4 nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- ****************************************************************************/
 
-/**
- * @file auv_att_control_main.cpp
- * AUV attitude controller.
- *
- *
- *
- * @author Lam-Hung NGUYEN		<lamhung81@gmail.com>
- *
- *
- */
-
-// include:..........
-
-//#include <conversion/rotation.h>
-//#include <drivers/drv_hrt.h>
-//#include <lib/geo/geo.h>
-//#include <lib/mathlib/mathlib.h>
-//#include <lib/tailsitter_recovery/tailsitter_recovery.h>
-//#include <px4_config.h>
-//#include <px4_defines.h>
-//#include <px4_posix.h>
-//#include <px4_tasks.h>
-//#include <systemlib/circuit_breaker.h>
-//#include <systemlib/err.h>
-//#include <systemlib/param/param.h>
-//#include <systemlib/perf_counter.h>
-//#include <systemlib/systemlib.h>
-//#include <uORB/topics/actuator_armed.h>
-//#include <uORB/topics/actuator_controls.h>
-//#include <uORB/topics/battery_status.h>
-//#include <uORB/topics/control_state.h>
-//#include <uORB/topics/manual_control_setpoint.h>
-//#include <uORB/topics/mc_att_ctrl_status.h>
-//#include <uORB/topics/multirotor_motor_limits.h>
-//#include <uORB/topics/parameter_update.h>
-//#include <uORB/topics/sensor_correction.h>
-//#include <uORB/topics/sensor_gyro.h>
-//#include <uORB/topics/vehicle_attitude_setpoint.h>
-//#include <uORB/topics/vehicle_control_mode.h>
-//#include <uORB/topics/vehicle_rates_setpoint.h>
-//#include <uORB/topics/vehicle_status.h>
-//#include <uORB/uORB.h>
-//
-///**
-// * AUV attitude control app start / stop handling function
-// *
-// * @ingroup apps
-// */
 //extern "C" __EXPORT int auv_att_control_main(int argc, char *argv[]);
 //
 //
@@ -384,43 +304,6 @@ AUVAttitudeControl::~AUVAttitudeControl()
 }
 
 
-
-
-//int
-//AUVAttitudeControl::parameters_update()
-//{
-
-//}
-
-
-/**
- * Attitude controller.
- * Input: 'vehicle_attitude_setpoint' topics (depending on mode)
- * Output: '_rates_sp' vector, '_thrust_sp'
- */
-//void
-//AUVAttitudeControl::control_attitude(float dt)
-//{
-//}
-
-//void
-//AUVAttitudeControl::task_main()
-//{
-//Flying with USB is not safe
-//}
-// nsh: mc_att_control: command not found
-// default PWM output device
-
-//error finding param: FW_ARSP_MODE
-//nsh: mc_att_control: command not found
-//
-
-/* Function for create a deadband for joytick
-theshold is a positive number
-
-*/
-
-
 void AUVAttitudeControl::ForceMoment2Throttle(double Force[3], double Moment[3], double & throttle_0, 
                                                                                  double & throttle_1,
                                                                                  double & throttle_2,
@@ -613,20 +496,6 @@ AUVAttitudeControl::pressure_poll()
   }
 }
 
-
-/*
-void
-AUVAttitudeControl::manual_control_setpoint_poll()
-{
-  // check if there is a new setpoint 
-  bool updated;
-  orb_check(_manual_control_sp_sub, &updated);
-auv_att_control
-  if (updated) {
-    orb_copy(ORB_ID(manual_control_setpoint), _manual_control_sp_sub, &_manual_control_sp);
-  }
-}
-*/
 
 void
 AUVAttitudeControl::depth_estimate(float dt)
@@ -1009,22 +878,11 @@ AUVAttitudeControl::control_att(float dt)
   Vector<3> z_omega_dot = Omega_tilde;
 
   _z_omega     += z_omega_dot*dt; 
+   
+  Vector<3>  G_feedforward;  
+  G_feedforward = (J*Omega) % Omega_d - J*Omega_d_dot; 
 
-  Vector<3> JOmega = J*Omega;
-
-  Vector3f JOmega_vector (JOmega(0), JOmega(1), JOmega(2)); 
-
-  Vector3f Omega_d_vector (Omega_d(0), Omega_d(1), Omega_d(2));
-  
-  Vector3f JOmega_Omega_d_vector; 
-  JOmega_Omega_d_vector = JOmega_vector.cross(Omega_d_vector);
-  Vector<3> JOmega_Omega_d(JOmega_Omega_d_vector(0), JOmega_Omega_d_vector(1), JOmega_Omega_d_vector(2));
-  
-  Vector<3>  G_feedforward;
-  G_feedforward = JOmega_Omega_d - J*Omega_d_dot; 
-
-  Matrix<3, 3> K_Omega;
- 
+  Matrix<3, 3> K_Omega; 
   K_Omega(0, 0) = 3.0f*0.2024f;  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
   K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 3.0f*0.6516f;   K_Omega(1, 2) = 0.0000f;
   K_Omega(2, 0) = 0.0000f;       K_Omega(2, 1) = 0.0000f;        K_Omega(2, 2) = 3.0f*0.5448f;
@@ -1033,31 +891,17 @@ AUVAttitudeControl::control_att(float dt)
 
   float eta3 = 8.0;
   
-
-  Vector3f e3_vector(e3(0), e3(1), e3(2));
-  Vector3f gamma_vector(gamma(0), gamma(1), gamma(2)); 
-  Vector3f e3RTe3_vector;
-  e3RTe3_vector = e3_vector.cross(gamma_vector);
-
-  Vector<3> e3RTe3 (e3RTe3_vector(0), e3RTe3_vector(1), e3RTe3_vector(2));
-
-  Vector<3> Gg;
-  Gg = e3RTe3*15.0*9.81*0.1;  //m*g*l e3 x RT e3
+  Vector<3> Gg;  
+  Gg = (e3 % gamma) * 15.0*9.81*0.1;  //m*g*l e3 x RT e3
 
   float a0 = 0.5;
-  float k0 = 20.0;
-  
-  Vector3f Omega_hat_vector (_Omega_hat(0), _Omega_hat(1), _Omega_hat(2));
-  
-  Vector3f JOmega_Omega_hat_vector; 
-  JOmega_Omega_hat_vector = JOmega_vector.cross(Omega_hat_vector);
-
-  Vector<3> JOmega_Omega_hat (JOmega_Omega_hat_vector(0), JOmega_Omega_hat_vector(1), JOmega_Omega_hat_vector(2));
-  
-  Vector<3> temp(0.0f, 0.0f, 0.0f);
+  float k0 = 20.0;  
+    
   Vector<3> G_control(_Gamma_c_x, _Gamma_c_y, _Gamma_c_z);
 
-  temp = JOmega_Omega_hat + G_control + Gg + _Delta_G_hat;
+  Vector<3> temp(0.0f, 0.0f, 0.0f);  
+  temp = (J*Omega) % _Omega_hat + G_control + Gg + _Delta_G_hat;
+
 
   Vector<3> Omega_hat_dot(0.0f, 0.0f, 0.0f);
   Omega_hat_dot = J_inverted*temp + (Omega - _Omega_hat)* k0;
@@ -1071,47 +915,10 @@ AUVAttitudeControl::control_att(float dt)
 
   Vector<3> Gamma_C;
   Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - _z_omega*Ki_Omega - G_feedforward - _Delta_G_hat;
-
 	
 	_Gamma_c_x = Gamma_C(0);
 	_Gamma_c_y = Gamma_C(1);
  	_Gamma_c_z = Gamma_C(2);
-
- 	//PX4_INFO("Debug Gamma_c: %1.6f  %1.6f  %1.6f", (double)_Gamma_c_x , (double)_Gamma_c_y , (double)_Gamma_c_z );
- 	//PX4_INFO("Debug Sensor_gyro: %1.6f  %1.6f  %1.6f", (double)_sensor_gyro.x , (double)_sensor_gyro.y , (double)_sensor_gyro.z);
-
- 	/*
- 	//For debugging
-	_optical_flow_p_sp.gyro_x_rate_integral =  _sensor_combined.gyro_rad[0];//+57.3f * Euler_angle_in_rad(0); //_Gamma_c_x;
-	
-	_optical_flow_p_sp.gyro_y_rate_integral = -_sensor_combined.gyro_rad[1];//-57.3f * Euler_angle_in_rad(1); //_Gamma_c_y;
-	
-	_optical_flow_p_sp.gyro_z_rate_integral = -_sensor_combined.gyro_rad[2];//-57.3f * Euler_angle_in_rad(2); // _Gamma_c_z;
-
-	_optical_flow_p_sp.timestamp = hrt_absolute_time();
-        // _replay_mode ? now : hrt_absolute_time();
-
-        orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
-
-        //Test commit
-        */
-
- 	/*
- 	//For debugging
-	_optical_flow_p_sp.gyro_x_rate_integral =   _Gamma_c_x;
-	
-	_optical_flow_p_sp.gyro_y_rate_integral = - _Gamma_c_y;
-	
-	_optical_flow_p_sp.gyro_z_rate_integral = - _Gamma_c_z;
-
-	_optical_flow_p_sp.timestamp = hrt_absolute_time();
-       
-
-        orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
-
-	*/
-
-
 }
 
 
@@ -1339,18 +1146,8 @@ AUVAttitudeControl::task_main()
       			Force[2]  =  1.0f*_Fcz;
       			Moment[0] =  1.0f*_Gamma_c_x;   
       			Moment[1] =  1.0f*_Gamma_c_y;    
-      			Moment[2] =  1.0f*_Gamma_c_z;  
-                        
-      			/* debug lhnguyen pwm output to motors */
-      			//PX4_INFO("Debug AUV: %1.6f  %1.6f  %1.6f %1.6f ", Force[2], Moment[0], Moment[1], Moment[2]);
-
-      			
-
-
-                                                                                     
+      			Moment[2] =  1.0f*_Gamma_c_z;                                                                              
       							
-
-
     		}
 
     		//Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
@@ -1387,22 +1184,7 @@ AUVAttitudeControl::task_main()
     		//Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
     		throttle[4] = +1.0*throttle[4]; //Throttle 5
 
-          /*
-        	//lhnguyen debug: Send throttle
-        	_optical_flow_p_sp.pixel_flow_x_integral  =         throttle[0]   ;//           
-        	_optical_flow_p_sp.pixel_flow_y_integral  =    -1.0*throttle[1]   ;//
-        	_optical_flow_p_sp.gyro_x_rate_integral   =         throttle[2]   ;//   
-		      _optical_flow_p_sp.gyro_y_rate_integral   =    -1.0*throttle[3]   ;//
-		      _optical_flow_p_sp.gyro_z_rate_integral   =    -1.0*throttle[4]   ;
-		      _optical_flow_p_sp.ground_distance_m      =         throttle[5]   ;
-	
-		      _optical_flow_p_sp.timestamp = hrt_absolute_time();
-
-
-        	
-        	orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
-        	*/
-		
+          		
 
     		for (unsigned i = 0; i < 6; i++) {  
                         
@@ -1423,21 +1205,6 @@ AUVAttitudeControl::task_main()
       			}                 
     		}
 
-        /*
-        //lhnguyen debug: Send throttle
-          _optical_flow_p_sp.pixel_flow_x_integral  =         pwm_value[0]   ;//           
-          _optical_flow_p_sp.pixel_flow_y_integral  =    -1.0*pwm_value[1]   ;//
-          _optical_flow_p_sp.gyro_x_rate_integral   =         pwm_value[2]   ;//   
-          _optical_flow_p_sp.gyro_y_rate_integral   =    -1.0*pwm_value[3]   ;//
-          _optical_flow_p_sp.gyro_z_rate_integral   =    -1.0*pwm_value[4]   ;
-          _optical_flow_p_sp.ground_distance_m      =         pwm_value[5]   ;
-  
-          _optical_flow_p_sp.timestamp = hrt_absolute_time();
-
-
-          
-          orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
-        */
 
    	 	#ifdef __PX4_NUTTX
       		/* Trigger all timer's channels in Oneshot mode to fire
