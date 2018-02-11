@@ -974,30 +974,8 @@ AUVAttitudeControl::control_depth(float dt)
   */
 
   //Control with integrator
-  depth_estimate(dt);
-  float h_tilde  = _depth_estimated - _zr;
-  float hr_dot   = 0.0; //_vzr; because the joystick do not give the good value by using two buttons as above
-  float k1_depth = 1.0;
 
-  float vzd = - k1_depth* h_tilde + hr_dot;
-
-  float vzd_dot = 0.0; // = - k1_depth* (_v_depth_estimated - hr_dot) + hr_ddot; //hr_ddot = 0;
-
-  float k2_depth      = 1.4142;
-  float delta_z_depth = 0.8;
-  float kz_depth      = 2.0;
-
-  float vz_tilde    = _v_depth_estimated - vzd;
-  float vz_bar      = vz_tilde + _z_depth;
-  float z_depth_dot = kz_depth*(-_z_depth + satFunction(vz_bar, delta_z_depth));
-
-  float Fcz_Inertial = 19.0f* (vzd_dot + satFunction(-k2_depth*vz_bar,0.5) - z_depth_dot);  //mz = 19.0 kg
-
-
-
-
-
-  orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
+ orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
   
   //orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
   orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
@@ -1015,6 +993,41 @@ AUVAttitudeControl::control_depth(float dt)
 
   Vector<3> e3(0.0f, 0.0f, 1.0f);
   Vector<3> gamma = R_hat * e3;
+
+  double roll_velocity  = _v_att.rollspeed;
+  double pitch_velocity = _v_att.pitchspeed; 
+  float roll  = Euler_angle_in_rad(0);
+  float pitch = Euler_angle_in_rad(1);
+
+  double d_PP1 = 0.01; // Distance from pressure sensor to projection point P1, in meter
+  double L_P1B = 0.3;  // Distance from projection P1 to center of boyancy, in meter
+
+  //Depth control is according to center of boyancy.
+  //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
+  //
+  double depth_B   = (double)_depth_estimated + d_PP1*cos(roll)*cos(pitch) - L_P1B*sin(pitch); // AUV depth measured at the centre of boyancy
+  double v_depth_B = (double)_v_depth_estimated - d_PP1*sin(roll)*cos(pitch)*roll_velocity -(d_PP1*cos(roll)*sin(pitch) + L_P1B*cos(pitch))*pitch_velocity; //AUV depth velocity measured at the centre of boyancy
+
+
+  depth_estimate(dt);
+  float h_tilde  = (float)depth_B - _zr;
+  float hr_dot   = 0.0; //_vzr; because the joystick do not give the good value by using two buttons as above
+  float k1_depth = 1.0;
+
+  float vzd = - k1_depth* h_tilde + hr_dot;
+
+  float vzd_dot = 0.0; // = - k1_depth* (v_depth_B - hr_dot) + hr_ddot; //hr_ddot = 0;
+
+  float k2_depth      = 1.4142;
+  float delta_z_depth = 0.8;
+  float kz_depth      = 2.0;
+
+  float vz_tilde    = (float)v_depth_B - vzd;
+  float vz_bar      = vz_tilde + _z_depth;
+  float z_depth_dot = kz_depth*(-_z_depth + satFunction(vz_bar, delta_z_depth));
+
+  float Fcz_Inertial = 19.0f* (vzd_dot + satFunction(-k2_depth*vz_bar,0.5) - z_depth_dot);  //mz = 19.0 kg
+
 
   //Fc_Intertial = (0.0f, 0.0f, Fcz_Inertial) = e3*Fcz_Inertial;
   Vector<3> Fc_body = gamma*Fcz_Inertial;
@@ -1089,7 +1102,7 @@ AUVAttitudeControl::control_att(float dt)
 	gamma_d(2) = sqrt(1.0f - gamma_d(0)*gamma_d(0) - gamma_d(1)*gamma_d(1));
 
 	//max yaw_angular_velocity = pi/12
-	omega_d    = 2.0f*0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
+	omega_d    = 3.0f*0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
 
 //  Get from joystick by hi-jacking vehicle_rates_setpoint to send it
 //
@@ -1119,7 +1132,7 @@ AUVAttitudeControl::control_att(float dt)
         	orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
 	*/
 	
-  _Fcx_manual = 4.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
+  _Fcx_manual = 5.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
 
 
 
