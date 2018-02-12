@@ -646,23 +646,42 @@ AUVAttitudeControl::control_depth(float dt)
 
 
   Quaternion Q_temp = _v_att.q;
-  Matrix<3, 3> R_hat    = Q_temp.to_dcm();
-
-  Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
- 
-  R_hat = R_hat.transposed();
+  Matrix<3, 3> R    = Q_temp.to_dcm();
+   
+  Matrix<3, 3> R_hat = R.transposed();
 
   Vector<3> e3(0.0f, 0.0f, 1.0f);
   Vector<3> gamma = R_hat * e3;
 
-  double roll_velocity  = _v_att.rollspeed;
-  double pitch_velocity = _v_att.pitchspeed; 
-  float roll  = Euler_angle_in_rad(0);
-  float pitch = Euler_angle_in_rad(1);
 
   //Assume that pressure sensor P is exactly on vertical symmestrical plane
-  double d_PP1 = 0.01; // Distance from pressure sensor to projection point P1, along z axe, in meter
-  double L_P1B = 0.3;  // Distance from projection P1 to center of boyancy, along x axe, in meter
+  float d_PP1 = 0.01; // Distance from pressure sensor to projection point P1, along z axe, in meter
+  float L_P1B = 0.3;  // Distance from projection P1 to center of boyancy, along x axe, in meter
+
+  //Depth control is according to center of boyancy.
+  //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
+  //
+
+  float omega_1  = _v_att.rollspeed;
+  float omega_2  = _v_att.pitchspeed; 
+  float omega_3  = _v_att.yawspeed;
+
+  float temp_A = omega_1*R(1,0) - omega_2*(R(0,0) + R(2,2)) + omega_3*R(2,1);
+  float temp_C = omega_1*(R(1,2) - R(2,1)) + omega_2*(R(2,0) - R(0,2));
+
+  float depth_B   = (float)_depth_estimated   + R(2,0)*L_P1B  + R(2,2)*d_PP1; // AUV depth measured at the centre of boyancy
+  float v_depth_B = (float)_v_depth_estimated + temp_A*L_P1B  + temp_C*d_PP1; //AUV depth velocity measured at the centre of boyancy
+
+
+  /* The following paragraph of code is not good since the rollspeed, pitchspeed and yawspeed in vehicle_attitude message are omega_1, omega_2 and omega_3
+  // They are not derivatives of roll, pitch and yaw angles.
+  // The given names are confusing!!!!
+
+  double roll_velocity  = _v_att.rollspeed;
+  double pitch_velocity = _v_att.pitchspeed; 
+  Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
+  float roll  = Euler_angle_in_rad(0);
+  float pitch = Euler_angle_in_rad(1);  
 
   //Depth control is according to center of boyancy.
   //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
@@ -670,6 +689,7 @@ AUVAttitudeControl::control_depth(float dt)
   double depth_B   = (double)_depth_estimated + d_PP1*cos(roll)*cos(pitch) - L_P1B*sin(pitch); // AUV depth measured at the centre of boyancy
   double v_depth_B = (double)_v_depth_estimated - d_PP1*sin(roll)*cos(pitch)*roll_velocity -(d_PP1*cos(roll)*sin(pitch) + L_P1B*cos(pitch))*pitch_velocity; //AUV depth velocity measured at the centre of boyancy
 
+  */
 
   depth_estimate(dt);
   float h_tilde  = (float)depth_B - _zr;
@@ -767,18 +787,17 @@ AUVAttitudeControl::control_att(float dt)
 
 	Vector<3> e3(0.0f, 0.0f, 1.0f);
 	Vector<3> gamma = R_hat * e3;
-
 	
 	Vector<3> gamma_d (0.0f, 0.0f, 1.0f);  //Should be input from joystick
-	float omega_d = 0.0f;                  //Should be input from joystick
 	
 	//lhnguyen debug: Becareful about sign of components of gamma_d
-	//nghieng max 30 deg -> magnitude 0.5 
+	//nghieng max 45 deg -> magnitude 0.707f 
 	gamma_d(0) =  0.707f*joystick_deadband(_v_rates_sp.pitch ,0.2);
 	gamma_d(1) =  0.707f*joystick_deadband(_v_rates_sp.roll,0.2);
 	gamma_d(2) = sqrt(1.0f - gamma_d(0)*gamma_d(0) - gamma_d(1)*gamma_d(1));
 
-	//max yaw_angular_velocity = pi/12
+	float omega_d = 0.0f;                  //Should be input from joystick
+  //max yaw_angular_velocity = pi/12
 	omega_d    = 3.0f*0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
 
 //  Get from joystick by hi-jacking vehicle_rates_setpoint to send it
@@ -838,25 +857,27 @@ AUVAttitudeControl::control_att(float dt)
 	//J(2, 0) = 0.005f;   J(2, 1) = 0.007f;   J(2, 2) = 0.3116f;
 
   //For New-BlueROV1, total innertial
-  J(0, 0) = 0.2024f;  J(0, 1) = 0.0000f;   J(0, 2) = 0.0000f;
-  J(1, 0) = 0.0000f;  J(1, 1) = 0.6516f;   J(1, 2) = 0.0000f;
-  J(2, 0) = 0.0000f;  J(2, 1) = 0.0000f;   J(2, 2) = 0.5448f;
+  J(0, 0) = 0.3105f;  J(0, 1) = 0.0000f;   J(0, 2) = 0.0000f;
+  J(1, 0) = 0.0000f;  J(1, 1) = 0.8486f;   J(1, 2) = 0.0000f;
+  J(2, 0) = 0.0000f;  J(2, 1) = 0.0000f;   J(2, 2) = 0.7176f;
 
 
   Matrix<3, 3> J_inverted;
   J_inverted.zero();
   
   //For New-BlueROV1, total innertial
-  J_inverted(0, 0) = 4.9407f;  J_inverted(0, 1) = 0.0000f;   J_inverted(0, 2) = 0.0000f;
-  J_inverted(1, 0) = 0.0000f;  J_inverted(1, 1) = 1.5347f;   J_inverted(1, 2) = 0.0000f;
-  J_inverted(2, 0) = 0.0000f;  J_inverted(2, 1) = 0.0000f;   J_inverted(2, 2) = 1.8355f;
+  J_inverted(0, 0) = 3.2206f;  J_inverted(0, 1) = 0.0000f;   J_inverted(0, 2) = 0.0000f;
+  J_inverted(1, 0) = 0.0000f;  J_inverted(1, 1) = 1.1784f;   J_inverted(1, 2) = 0.0000f;
+  J_inverted(2, 0) = 0.0000f;  J_inverted(2, 1) = 0.0000f;   J_inverted(2, 2) = 1.3935f;
 
 
 
 	//Vector<3> Omega(0.0f, 0.0f, 0.0f);   //Should read from sensor??
 	//Vector<3> Omega(_sensor_gyro.x, _sensor_gyro.y, _sensor_gyro.z);                                          //from sensor_gyro directly
-	Vector<3> Omega(_sensor_combined.gyro_rad[0], _sensor_combined.gyro_rad[1], _sensor_combined.gyro_rad[2]);  //From sensor_combined with average value
+	//Vector<3> Omega(_sensor_combined.gyro_rad[0], _sensor_combined.gyro_rad[1], _sensor_combined.gyro_rad[2]);  //From sensor_combined with average value
 	
+  // Use the filtered one from vehicle_attitude message!!!
+  Vector<3> Omega(_v_att.rollspeed, _v_att.pitchspeed, _v_att.yawspeed); 
 
 	Vector<3> Omega_tilde = Omega - Omega_d; 
 
@@ -883,16 +904,16 @@ AUVAttitudeControl::control_att(float dt)
   G_feedforward = (J*Omega) % Omega_d - J*Omega_d_dot; 
 
   Matrix<3, 3> K_Omega; 
-  K_Omega(0, 0) = 3.0f*0.2024f;  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
-  K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 3.0f*0.6516f;   K_Omega(1, 2) = 0.0000f;
-  K_Omega(2, 0) = 0.0000f;       K_Omega(2, 1) = 0.0000f;        K_Omega(2, 2) = 3.0f*0.5448f;
+  K_Omega(0, 0) = 3.0f*0.3105f;  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
+  K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 3.0f*0.8486f;   K_Omega(1, 2) = 0.0000f;
+  K_Omega(2, 0) = 0.0000f;       K_Omega(2, 1) = 0.0000f;        K_Omega(2, 2) = 3.0f*0.7176f;
 
   float Ki_Omega = 6.0;
 
   float eta3 = 8.0;
   
   Vector<3> Gg;  
-  Gg = (e3 % gamma) * 15.0*9.81*0.1;  //m*g*l e3 x RT e3
+  Gg = (e3 % gamma) * 14.2*9.81*0.1;  //m*g*l e3 x RT e3
 
   float a0 = 0.5;
   float k0 = 20.0;  
@@ -1138,8 +1159,8 @@ AUVAttitudeControl::task_main()
       			// Moment[1] =  (float)2.0*raw.pitch;    
       			// Moment[2] =  (float)2.0*raw.yaw;   
 
-			//Attitude control, calculate _Gamma_c_x, _Gamma_c_y, _Gamma_c_z
-			control_att(dt); 
+			      //Attitude control, calculate _Gamma_c_x, _Gamma_c_y, _Gamma_c_z
+			      control_att(dt); 
 
       			Force[0]  =  1.0f*_Fcx + 1.0f*_Fcx_manual;
       			Force[1]  =  1.0f*_Fcy; 
