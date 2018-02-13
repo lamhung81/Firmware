@@ -666,8 +666,11 @@ AUVAttitudeControl::control_depth(float dt)
   float omega_2  = _v_att.pitchspeed; 
   float omega_3  = _v_att.yawspeed;
 
-  float temp_A = omega_1*R(1,0) - omega_2*(R(0,0) + R(2,2)) + omega_3*R(2,1);
-  float temp_C = omega_1*(R(1,2) - R(2,1)) + omega_2*(R(2,0) - R(0,2));
+  //float temp_A = omega_1*R(1,0) - omega_2*(R(0,0) + R(2,2)) + omega_3*R(2,1);
+  //float temp_C = omega_1*(R(1,2) - R(2,1)) + omega_2*(R(2,0) - R(0,2));
+
+  float temp_A = omega_3*R(2,1) - omega_2*R(2,2);
+  float temp_C = omega_2*R(2,0) - omega_1*R(2,1);
 
   float depth_B   = (float)_depth_estimated   + R(2,0)*L_P1B  + R(2,2)*d_PP1; // AUV depth measured at the centre of boyancy
   float v_depth_B = (float)_v_depth_estimated + temp_A*L_P1B  + temp_C*d_PP1; //AUV depth velocity measured at the centre of boyancy
