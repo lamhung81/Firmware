@@ -83,6 +83,9 @@
 #include <uORB/topics/pressure.h>
 #include <uORB/topics/optical_flow.h>  //lhnguyen debug: low pass filter for depth and depth velocity estimation
 #include <uORB/topics/manual_control_setpoint.h>
+#include <uORB/topics/vehicle_force_setpoint.h>
+#include <uORB/topics/position_setpoint.h>
+
 
 
 #include <math.h>
@@ -134,6 +137,8 @@ private:
   	//int     _sensor_gyro_sub;
   	int     _sensor_combined_sub;
     int     _manual_control_sp_sub;
+    int     _v_force_sp_sub;
+    int     _position_sp_sub;
   	
 	float 	_vzr;
 	float   _zr;
@@ -154,6 +159,7 @@ private:
 
 	float 	_depth_estimated;
 	float 	_v_depth_estimated; 
+    int  _printing_time;
 
 
   	int   	_armed_sub;       /**< arming status subscription */
@@ -166,8 +172,8 @@ private:
   	//struct  sensor_gyro_s                _sensor_gyro;
   	struct  sensor_combined_s            _sensor_combined;
   	struct  manual_control_setpoint_s    _manual_control_sp;
-  	
-
+  	struct  vehicle_force_setpoint_s     _v_force_sp;
+    struct  position_setpoint_s          _position_sp;
   	
   	struct 	actuator_armed_s       _armed;             /**< actuator arming status */
 
@@ -241,6 +247,7 @@ AUVAttitudeControl::AUVAttitudeControl():
 
   _depth_estimated(0.0),
   _v_depth_estimated(0.0),
+  _printing_time(0),
   
   _armed_sub(-1),
 
@@ -252,6 +259,8 @@ AUVAttitudeControl::AUVAttitudeControl():
   //_sensor_gyro{},
   _sensor_combined{},
   _manual_control_sp{},
+  _v_force_sp{},
+  _position_sp{},
   
   _armed{},
 
@@ -500,12 +509,12 @@ AUVAttitudeControl::pressure_poll()
 void
 AUVAttitudeControl::depth_estimate(float dt)
 {
-	float k1 = 20.0;//2.0;
-    	float k2 = 100.0;//1.0;
+	float k1 = 10.0; //20.0;//2.0;
+    	float k2 = 25.0; //100.0;//1.0;
         
     	//double u = 0.0; //depth velocity
     	//float pressure_zero_level = 1030; 
-    	float pressure_zero_level = 1027.0; //980;
+    	float pressure_zero_level = 997.0; //1027.0; //980;
 
 	//depth and depth velocity observator
         // x = (_pressure - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
@@ -764,7 +773,15 @@ AUVAttitudeControl::control_att(float dt)
 	//For referent angular velocites and thrust
 	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 
+  orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
+  orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
 
+  //                                           NED                   0.5                  0.6                      0.7
+  //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+
+  //                                           ENU                   0.6                  0.5                     -0.7
+  PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+  PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
 
 
 	Quaternion Q_temp = _v_att.q;
@@ -801,7 +818,7 @@ AUVAttitudeControl::control_att(float dt)
 
 	float omega_d = 0.0f;                  //Should be input from joystick
   //max yaw_angular_velocity = pi/12
-	omega_d    = 3.0f*0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
+	omega_d    = 5.0f*0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
 
 //  Get from joystick by hi-jacking vehicle_rates_setpoint to send it
 //
@@ -895,11 +912,15 @@ AUVAttitudeControl::control_att(float dt)
 
 	//Vector<3> temp3(temp2(0), temp2(1), temp2(2));
 
+
 	//Vector<3> Gamma_C;
 	//Gamma_C = -(J * K)*Omega_tilde - temp3;
 
   //Integrator with simple integrator
-  Vector<3> z_omega_dot = Omega_tilde;
+  //Vector<3> z_omega_dot = Omega_tilde;
+
+  //Anti wind-up integrator
+  Vector<3> z_omega_dot = (- _z_omega  + sat3Function (_z_omega + Omega_tilde, 0.8f) ) *2.0f ;
 
   _z_omega     += z_omega_dot*dt; 
    
@@ -931,14 +952,16 @@ AUVAttitudeControl::control_att(float dt)
   Omega_hat_dot = J_inverted*temp + (Omega - _Omega_hat)* k0;
   
   _Omega_hat += Omega_hat_dot*dt; //Approximation  
+  _Omega_hat = sat3Function(_Omega_hat, 0.8);  //To prevent increasing too big!!!
 
   Vector<3> Delta_G_hat_dot;
   Delta_G_hat_dot = J*(Omega - _Omega_hat)* a0*a0*k0*k0;
   
   _Delta_G_hat += Delta_G_hat_dot*dt; //Approximation
+  _Delta_G_hat = sat3Function(_Delta_G_hat, 0.8);  //To prevent increasing too big!!!
 
   Vector<3> Gamma_C;
-  Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - _z_omega*Ki_Omega - G_feedforward - _Delta_G_hat;
+  Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - _z_omega*Ki_Omega - G_feedforward - _Delta_G_hat*0.0f; //Multiplication to 0.0f in case without current, for debugging
 	
 	_Gamma_c_x = Gamma_C(0);
 	_Gamma_c_y = Gamma_C(1);
