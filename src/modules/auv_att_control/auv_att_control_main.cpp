@@ -163,6 +163,8 @@
 #include <uORB/topics/pressure.h>
 #include <uORB/topics/optical_flow.h>  //lhnguyen debug: low pass filter for depth and depth velocity estimation
 #include <uORB/topics/manual_control_setpoint.h>
+#include <uORB/topics/vehicle_force_setpoint.h>
+#include <uORB/topics/position_setpoint.h>
 
 
 #include <math.h>
@@ -214,6 +216,8 @@ private:
   	//int     _sensor_gyro_sub;
   	int     _sensor_combined_sub;
     int     _manual_control_sp_sub;
+    int     _v_force_sp_sub;
+    int     _position_sp_sub;
   	
 	float 	_vzr;
 	float   _zr;
@@ -223,6 +227,10 @@ private:
   float   _Fcx_manual;
   float   _z_depth;
 
+  Vector<3> _z_omega;
+  Vector<3> _Omega_hat;
+  Vector<3> _Delta_G_hat;
+
 
 	float   _Gamma_c_x;
 	float   _Gamma_c_y;
@@ -230,6 +238,8 @@ private:
 
 	float 	_depth_estimated;
 	float 	_v_depth_estimated; 
+
+  int _printing_time;
 
 
   	int   	_armed_sub;       /**< arming status subscription */
@@ -242,7 +252,9 @@ private:
   	//struct  sensor_gyro_s                _sensor_gyro;
   	struct  sensor_combined_s            _sensor_combined;
   	struct  manual_control_setpoint_s    _manual_control_sp;
-  	
+    struct  vehicle_force_setpoint_s     _v_force_sp;
+    struct  position_setpoint_s          _position_sp;
+      	
 
   	
   	struct 	actuator_armed_s       _armed;             /**< actuator arming status */
@@ -282,6 +294,7 @@ private:
   	int    	task_main();     
 
     float satFunction(float x, float delta_x);
+    Vector<3> sat3Function(Vector<3> x, float delta_x);
 
 
 };
@@ -307,12 +320,17 @@ AUVAttitudeControl::AUVAttitudeControl():
   _Fcx_manual(0.0),
   _z_depth(0.0),
 
+  _z_omega(0.0f, 0.0f, 0.0f),
+  _Omega_hat(0.0f, 0.0f, 0.0f),
+  _Delta_G_hat(0.0f, 0.0f, 0.0f),
+
   _Gamma_c_x(0.0f),
   _Gamma_c_y(0.0f),
   _Gamma_c_z(0.0f),
 
   _depth_estimated(0.0),
   _v_depth_estimated(0.0),
+  _printing_time(0),
   
   _armed_sub(-1),
 
@@ -324,6 +342,8 @@ AUVAttitudeControl::AUVAttitudeControl():
   //_sensor_gyro{},
   _sensor_combined{},
   _manual_control_sp{},
+  _v_force_sp{},
+  _position_sp{},
   
   _armed{},
 
@@ -843,12 +863,12 @@ auv_att_control
 void
 AUVAttitudeControl::depth_estimate(float dt)
 {
-	float k1 = 20.0;//2.0;
-    	float k2 = 100.0;//1.0;
+	float k1 = 10.0; // 20.0;//2.0;
+    	float k2 = 25.0; // 100.0;//1.0;
         
     	//double u = 0.0; //depth velocity
     	//float pressure_zero_level = 1030; 
-    	float pressure_zero_level = 1027.0; //980;
+    	float pressure_zero_level = 997.0; //1010.0; //980;
 
 	//depth and depth velocity observator
         // x = (_pressure - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
@@ -947,16 +967,19 @@ AUVAttitudeControl::control_depth(float dt)
 	//Update reference depth value
 	_zr += _vzr*dt;  
 
-	//limit min and max depth 
-	if (_zr <= (float)0.2){
-		_zr  = (float) 0.2;
-		_vzr = (float) 0.0;
-	} 
+	 float depth_top = 0.1;
+  float depth_bottom = 1.0;
 
-	if (_zr >= (float)1.2) {
-		_zr = (float) 1.2;
-		_vzr = (float) 0.0;
-	}
+  //limit min and max depth 
+  if (_zr <= depth_top){
+    _zr  = depth_top;
+    _vzr = (float) 0.0;
+  } 
+
+  if (_zr >= depth_bottom) {
+    _zr = depth_bottom;
+    _vzr = (float) 0.0;
+  }
 
   /* 
   //Control without integrator
@@ -973,6 +996,7 @@ AUVAttitudeControl::control_depth(float dt)
 	//PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
   */
 
+/*
   //Control with integrator
   depth_estimate(dt);
   float h_tilde  = _depth_estimated - _zr;
@@ -990,6 +1014,7 @@ AUVAttitudeControl::control_depth(float dt)
   float vz_tilde    = _v_depth_estimated - vzd;
   float vz_bar      = vz_tilde + _z_depth;
   float z_depth_dot = kz_depth*(-_z_depth + satFunction(vz_bar, delta_z_depth));
+  _z_depth += z_depth_dot*dt;
 
   float Fcz_Inertial = 19.0f* (vzd_dot + satFunction(-k2_depth*vz_bar,0.5) - z_depth_dot);  //mz = 19.0 kg
 
@@ -1021,6 +1046,97 @@ AUVAttitudeControl::control_depth(float dt)
   _Fcx = Fc_body(0);
   _Fcy = Fc_body(1);
   _Fcz = Fc_body(2);
+*/
+
+orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
+  
+  //orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
+  orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
+  
+  //For referent angular velocites and thrust
+  orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+
+
+  Quaternion Q_temp = _v_att.q;
+  Matrix<3, 3> R    = Q_temp.to_dcm();
+   
+  Matrix<3, 3> R_hat = R.transposed();
+
+  Vector<3> e3(0.0f, 0.0f, 1.0f);
+  Vector<3> gamma = R_hat * e3;
+
+
+  //Assume that pressure sensor P is exactly on vertical symmestrical plane
+  float d_PP1 = 0.01; // Distance from pressure sensor to projection point P1, along z axe, in meter
+  float L_P1B = 0.3;  // Distance from projection P1 to center of boyancy, along x axe, in meter
+
+  //Depth control is according to center of boyancy.
+  //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
+  //
+
+  float omega_1  = _v_att.rollspeed;
+  float omega_2  = _v_att.pitchspeed; 
+  float omega_3  = _v_att.yawspeed;
+
+  //float temp_A = omega_1*R(1,0) - omega_2*(R(0,0) + R(2,2)) + omega_3*R(2,1);
+  //float temp_C = omega_1*(R(1,2) - R(2,1)) + omega_2*(R(2,0) - R(0,2));
+
+  float temp_A = omega_3*R(2,1) - omega_2*R(2,2);
+  float temp_C = omega_2*R(2,0) - omega_1*R(2,1);
+
+  float depth_B   = (float)_depth_estimated   + R(2,0)*L_P1B  + R(2,2)*d_PP1; // AUV depth measured at the centre of boyancy
+  float v_depth_B = (float)_v_depth_estimated + temp_A*L_P1B  + temp_C*d_PP1; //AUV depth velocity measured at the centre of boyancy
+
+
+  /* The following paragraph of code is not good since the rollspeed, pitchspeed and yawspeed in vehicle_attitude message are omega_1, omega_2 and omega_3
+  // They are not derivatives of roll, pitch and yaw angles.
+  // The given names are confusing!!!!
+  double roll_velocity  = _v_att.rollspeed;
+  double pitch_velocity = _v_att.pitchspeed; 
+  Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
+  float roll  = Euler_angle_in_rad(0);
+  float pitch = Euler_angle_in_rad(1);  
+  //Depth control is according to center of boyancy.
+  //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
+  //
+  double depth_B   = (double)_depth_estimated + d_PP1*cos(roll)*cos(pitch) - L_P1B*sin(pitch); // AUV depth measured at the centre of boyancy
+  double v_depth_B = (double)_v_depth_estimated - d_PP1*sin(roll)*cos(pitch)*roll_velocity -(d_PP1*cos(roll)*sin(pitch) + L_P1B*cos(pitch))*pitch_velocity; //AUV depth velocity measured at the centre of boyancy
+  */
+
+  depth_estimate(dt);
+  float h_tilde  = (float)depth_B - _zr;
+  float hr_dot   = 0.0; //_vzr; because the joystick do not give the good value by using two buttons as above
+  float k1_depth = 0.5; // 1.0;
+
+  float vzd = - k1_depth* h_tilde + hr_dot;
+
+  float vzd_dot = 0.0; // = - k1_depth* (v_depth_B - hr_dot) + hr_ddot; //hr_ddot = 0;
+
+  float k2_depth      = 0.2; //1.0;//1.4142;
+  float delta_z_depth = 0.5; // 0.8;
+  float kz_depth      = 2.0;
+
+  float vz_tilde    = (float)v_depth_B - vzd;
+  float vz_bar      = vz_tilde + _z_depth;
+  float z_depth_dot = kz_depth*(-_z_depth + satFunction(vz_bar, delta_z_depth));
+
+  _z_depth += z_depth_dot*dt;
+
+  float Fcz_Inertial = 19.0f* (vzd_dot + satFunction(-k2_depth*vz_bar,0.5) - z_depth_dot);  //mz = 19.0 kg
+
+
+  //Fc_Intertial = (0.0f, 0.0f, Fcz_Inertial) = e3*Fcz_Inertial;
+  Vector<3> Fc_body = gamma*Fcz_Inertial;
+  _Fcx = Fc_body(0);
+  _Fcy = Fc_body(1);
+  _Fcz = Fc_body(2);
+
+
+  //if (_printing_time > 99) {
+  //     PX4_INFO("Debug _z_depth: %1.6f ", (double)_z_depth );             
+  //}
+
+
 
 }
 
@@ -1039,6 +1155,20 @@ float AUVAttitudeControl::satFunction(float x, float delta_x)
 }
 
 
+Vector<3> AUVAttitudeControl::sat3Function(Vector<3> x, float delta_x)
+{//(unsigned i = 0; i < 6; i++)
+  //for (int i=0; i < 3; ++i){
+  for (unsigned i = 0; i < 3; i++){
+    if (x(i) > delta_x) {
+       x(i) = delta_x;
+    }
+    else if (x(i) < -delta_x){
+      x(i) = -delta_x;
+    }
+  } 
+  return Vector<3> (x(0), x(1), x(2));
+}
+
 void
 AUVAttitudeControl::control_att(float dt)
 {       
@@ -1051,6 +1181,15 @@ AUVAttitudeControl::control_att(float dt)
 	//For referent angular velocites and thrust
 	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 
+  orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
+  orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
+
+  //                                           NED                   0.5                  0.6                      0.7
+  //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+
+  //                                           ENU                   0.6                  0.5                     -0.7
+  PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+  PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
 
 
 
@@ -1089,7 +1228,7 @@ AUVAttitudeControl::control_att(float dt)
 	gamma_d(2) = sqrt(1.0f - gamma_d(0)*gamma_d(0) - gamma_d(1)*gamma_d(1));
 
 	//max yaw_angular_velocity = pi/12
-	omega_d    = 2.0f*0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
+	omega_d    = 5.0f*0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
 
 //  Get from joystick by hi-jacking vehicle_rates_setpoint to send it
 //
@@ -1119,23 +1258,77 @@ AUVAttitudeControl::control_att(float dt)
         	orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
 	*/
 	
-  _Fcx_manual = 4.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
+  _Fcx_manual = 5.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
 
+
+/*
+  float k1 = 0.8f;
+  Vector<3> Omega_d;
+  //In order: Vector and then scalar value, for multiplication 
+  Omega_d = (gamma_d % gamma) * k1 + gamma_d *  omega_d;
+
+  Matrix<3, 3> J;
+  J.zero();
+  //For New-BlueROV1, total innertial
+  J(0, 0) = 0.3105f;  J(0, 1) = 0.0000f;   J(0, 2) = 0.0000f;
+  J(1, 0) = 0.0000f;  J(1, 1) = 0.8486f;   J(1, 2) = 0.0000f;
+  J(2, 0) = 0.0000f;  J(2, 1) = 0.0000f;   J(2, 2) = 0.7176f;
+
+  Vector<3> Omega(_v_att.rollspeed, _v_att.pitchspeed, _v_att.yawspeed); 
+
+  Vector<3> JOmega = J*Omega;
+  Vector3f temp (JOmega(0), JOmega(1), JOmega(2)); 
+
+  Vector3f temp1(Omega_d(0), Omega_d(1), Omega_d(2));
+  
+  Vector3f temp2; 
+  temp2 = temp.cross(temp1);
+
+  Vector<3> temp3(temp2(0), temp2(1), temp2(2));
+
+  Vector<3> Gamma_C;
+
+  float k2 = 3.0f; 
+  Matrix<3, 3> K;
+  K.zero();
+  K(0, 0) = k2;  K(1, 1) = k2;   K(2, 2) = 1.5f;
+
+  Vector<3> Omega_tilde = Omega - Omega_d; 
+
+  Gamma_C = -(J * K)*Omega_tilde - temp3;
+  
+  _Gamma_c_x = Gamma_C(0);
+  _Gamma_c_y = Gamma_C(1);
+  _Gamma_c_z = Gamma_C(2);
+
+  _printing_time += 1;
+  if (_printing_time > 50) {
+       PX4_INFO("Debug Gamma_c: %1.6f  %1.6f  %1.6f", (double)_Gamma_c_x , (double)_Gamma_c_y , (double)_Gamma_c_z );
+       _printing_time = 0;
+  }
+ 
+*/
 
 
 
 	//Gain
-	float k1 = 0.8f; //0.5f; //0.1f;
-	float k2 = 7.0f; //2.0f; //1.0f;
-	Matrix<3, 3> K;
-	K.zero();
-	K(0, 0) = k2;  K(1, 1) = k2;   K(2, 2) = 1.5f;
+  float k1 = 0.3f;
+	//float k1 = 0.8f; //0.5f; //0.1f;
+
+  
+	//float k2 = 7.0f; //2.0f; //1.0f;
+	//Matrix<3, 3> K;
+	//K.zero();
+	//K(0, 0) = k2;  K(1, 1) = k2;   K(2, 2) = 1.5f;
+
+
 
 
 	Vector<3> Omega_d;
 	//In order: Vector and then scalar value, for multiplication 
 	Omega_d = (gamma_d % gamma) * k1 + gamma_d *  omega_d;
 
+  Vector<3> Omega_d_dot(0.0f, 0.0f, 0.0f); //Approximation
 
 	//PX4_INFO("Debug Omega_d: %1.6f  %1.6f  %1.6f", (double)Omega_d(0), (double)Omega_d(1), (double)Omega_d(2));
 
@@ -1146,10 +1339,27 @@ AUVAttitudeControl::control_att(float dt)
 	//J(1, 0) = 0.004f;   J(1, 1) = 0.2643f;  J(1, 2) = 0.007f;
 	//J(2, 0) = 0.005f;   J(2, 1) = 0.007f;   J(2, 2) = 0.3116f;
 
-  //For New-BlueROV1
-  J(0, 0) = 0.12242f;  J(0, 1) = 0.004f;   J(0, 2) = 0.005f;
-  J(1, 0) = 0.004f;    J(1, 1) = 0.3516f;  J(1, 2) = 0.007f;
-  J(2, 0) = 0.005f;    J(2, 1) = 0.007f;   J(2, 2) = 0.3448f;
+  ///For New-BlueROV1
+  //J(0, 0) = 0.12242f;  J(0, 1) = 0.004f;   J(0, 2) = 0.005f;
+  //J(1, 0) = 0.004f;    J(1, 1) = 0.3516f;  J(1, 2) = 0.007f;
+  //J(2, 0) = 0.005f;    J(2, 1) = 0.007f;   J(2, 2) = 0.3448f;
+
+  //For New-BlueROV1, total innertial
+  J(0, 0) = 0.3105f;  J(0, 1) = 0.0000f;   J(0, 2) = 0.0000f;
+  J(1, 0) = 0.0000f;  J(1, 1) = 0.8486f;   J(1, 2) = 0.0000f;
+  J(2, 0) = 0.0000f;  J(2, 1) = 0.0000f;   J(2, 2) = 0.7176f;
+
+
+  Matrix<3, 3> J_inverted;
+  J_inverted.zero();
+  
+  //For New-BlueROV1, total innertial
+  J_inverted(0, 0) = 3.2206f;  J_inverted(0, 1) = 0.0000f;   J_inverted(0, 2) = 0.0000f;
+  J_inverted(1, 0) = 0.0000f;  J_inverted(1, 1) = 1.1784f;   J_inverted(1, 2) = 0.0000f;
+  J_inverted(2, 0) = 0.0000f;  J_inverted(2, 1) = 0.0000f;   J_inverted(2, 2) = 1.3935f;
+
+
+
 
 
 
@@ -1161,23 +1371,154 @@ AUVAttitudeControl::control_att(float dt)
 
 	Vector<3> Omega_tilde = Omega - Omega_d; 
 
+  //Vector<3> z_omega_dot = Omega_tilde ;
+  Vector<3> z_omega_dot = (- _z_omega  + sat3Function (_z_omega + Omega_tilde, 0.8f) ) *2.0f ;
 
-	Vector<3> JOmega = J*Omega;
-	Vector3f temp (JOmega(0), JOmega(1), JOmega(2)); 
 
-	Vector3f temp1(Omega_d(0), Omega_d(1), Omega_d(2));
+  _z_omega     += z_omega_dot*dt; 
+
+
+
+
+
+//   Vector<3>  G_feedforward;  
+//   G_feedforward = (J*Omega) % Omega_d - J*Omega_d_dot; 
+
+//    Matrix<3, 3> K_Omega; 
+//  K_Omega(0, 0) = 3.0f*0.3105f;  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
+//  K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 3.0f*0.8486f;   K_Omega(1, 2) = 0.0000f;
+//  K_Omega(2, 0) = 0.0000f;       K_Omega(2, 1) = 0.0000f;        K_Omega(2, 2) = 3.0f*0.7176f;
+
+//  float Ki_Omega = 6.0;
+
+ // float eta3 = 8.0;
+  
+//  Vector<3> Gg;  
+//  Gg = (e3 % gamma) * 14.2*9.81*0.1;  //m*g*l e3 x RT e3
+
+//  float a0 = 0.5;
+//  float k0 = 20.0;  
+    
+//  Vector<3> G_control(_Gamma_c_x, _Gamma_c_y, _Gamma_c_z);
+
+ // Vector<3> temp(0.0f, 0.0f, 0.0f);  
+ // temp = (J*Omega) % _Omega_hat + G_control + Gg + _Delta_G_hat;
+
+//  Vector<3> Omega_hat_dot(0.0f, 0.0f, 0.0f);
+//  Omega_hat_dot = J_inverted*temp + (Omega - _Omega_hat)* k0;
+  
+//  _Omega_hat += Omega_hat_dot*dt; //Approximation  
+
+//  Vector<3> Delta_G_hat_dot;
+//  Delta_G_hat_dot = J*(Omega - _Omega_hat)* a0*a0*k0*k0;
+  
+//  _Delta_G_hat += Delta_G_hat_dot*dt; //Approximation
+
+ // Vector<3> Gamma_C;
+//  Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - _z_omega*Ki_Omega - G_feedforward - _Delta_G_hat;
+  
+//  _Gamma_c_x = Gamma_C(0);
+ // _Gamma_c_y = Gamma_C(1);
+//  _Gamma_c_z = Gamma_C(2);
+
+
+  Vector<3> JOmega = J*Omega;
+
+  Vector3f JOmega_vector (JOmega(0), JOmega(1), JOmega(2)); 
+
+  Vector3f Omega_d_vector (Omega_d(0), Omega_d(1), Omega_d(2));
+  
+  Vector3f JOmega_Omega_d_vector; 
+  JOmega_Omega_d_vector = JOmega_vector.cross(Omega_d_vector);
+  Vector<3> JOmega_Omega_d(JOmega_Omega_d_vector(0), JOmega_Omega_d_vector(1), JOmega_Omega_d_vector(2));
+  
+  Vector<3>  G_feedforward;
+  G_feedforward = JOmega_Omega_d - J*Omega_d_dot; 
+
+  Matrix<3, 3> K_Omega; 
+
+  //K_Omega(0, 0) = 3.0f*0.3105f;  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
+  //K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 3.0f*0.8486f;   K_Omega(1, 2) = 0.0000f;
+  //K_Omega(2, 0) = 0.0000f;       K_Omega(2, 1) = 0.0000f;        K_Omega(2, 2) = 3.0f*0.7176f;
+
+  K_Omega(0, 0) = 1.0f*0.3105f;  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
+  K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 1.0f*0.8486f;   K_Omega(1, 2) = 0.0000f;
+  K_Omega(2, 0) = 0.0000f;       K_Omega(2, 1) = 0.0000f;        K_Omega(2, 2) = 1.0f*0.7176f;
+
+  float Ki_Omega = 3.0; //6.0;
+
+  float eta3 = 8.0;
+  
+
+  Vector3f e3_vector(e3(0), e3(1), e3(2));
+  Vector3f gamma_vector(gamma(0), gamma(1), gamma(2)); 
+  Vector3f e3RTe3_vector;
+  e3RTe3_vector = e3_vector.cross(gamma_vector);
+
+  Vector<3> e3RTe3 (e3RTe3_vector(0), e3RTe3_vector(1), e3RTe3_vector(2));
+
+  Vector<3> Gg;
+  Gg = e3RTe3*14.2*9.81*0.1;  //m*g*l e3 x RT e3
+
+  float a0 = 0.5;
+  float k0 = 20.0;
+  
+  Vector3f Omega_hat_vector (_Omega_hat(0), _Omega_hat(1), _Omega_hat(2));
+  
+  Vector3f JOmega_Omega_hat_vector; 
+  JOmega_Omega_hat_vector = JOmega_vector.cross(Omega_hat_vector);
+
+  Vector<3> JOmega_Omega_hat (JOmega_Omega_hat_vector(0), JOmega_Omega_hat_vector(1), JOmega_Omega_hat_vector(2));
+  
+  Vector<3> temp(0.0f, 0.0f, 0.0f);
+  Vector<3> G_control(_Gamma_c_x, _Gamma_c_y, _Gamma_c_z);
+
+  temp = JOmega_Omega_hat + G_control + Gg + _Delta_G_hat;
+
+  Vector<3> Omega_hat_dot(0.0f, 0.0f, 0.0f);
+  Omega_hat_dot = J_inverted*temp + (Omega - _Omega_hat)* k0;
+  
+  _Omega_hat += Omega_hat_dot*dt; //Approximation  
+
+  _Omega_hat = sat3Function(_Omega_hat, 0.8);  //To prevent increasing too big!!!
+
+  Vector<3> Delta_G_hat_dot;
+  Delta_G_hat_dot = J*(Omega - _Omega_hat)* a0*a0*k0*k0;
+  
+  _Delta_G_hat += Delta_G_hat_dot*dt; //Approximation
+  _Delta_G_hat = sat3Function(_Delta_G_hat, 0.8);  //To prevent increasing too big!!!
+
+  Vector<3> Gamma_C;
+  Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - _z_omega*Ki_Omega - G_feedforward - _Delta_G_hat*0.0f;
+
+  //Gamma_C(0) = -satFunction(K_Omega(0,0)*Omega_tilde(0), eta3) - _z_omega(0)*Ki_Omega - G_feedforward(0) - _Delta_G_hat(0);
+  //Gamma_C(1) = -satFunction(K_Omega(1,1)*Omega_tilde(1), eta3) - _z_omega(1)*Ki_Omega - G_feedforward(1) - _Delta_G_hat(1);
+  //Gamma_C(2) = -satFunction(K_Omega(2,2)*Omega_tilde(2), eta3) - _z_omega(2)*Ki_Omega - G_feedforward(2) - _Delta_G_hat(2);
+  
+  _Gamma_c_x = Gamma_C(0)*1.0f;
+  _Gamma_c_y = Gamma_C(1)*1.0f;
+  _Gamma_c_z = Gamma_C(2)*1.0f;
+
+/*
+  _printing_time += 1;
+  if (_printing_time > 100) {
+
+       PX4_INFO("Debug Gamma_c: %1.6f  %1.6f  %1.6f", (double)_Gamma_c_x , (double)_Gamma_c_y , (double)_Gamma_c_z );
+       PX4_INFO("Debug Delta_G_hat: %1.6f  %1.6f  %1.6f", (double)_Delta_G_hat(0) , (double)_Delta_G_hat(1) , (double)_Delta_G_hat(2) );
+       PX4_INFO("Debug _Omega_hat: %1.6f  %1.6f  %1.6f", (double)_Omega_hat(0) , (double)_Omega_hat(1) , (double)_Omega_hat(2) );
+       PX4_INFO("Debug _z_omega: %1.6f  %1.6f  %1.6f", (double)_z_omega(0) , (double)_z_omega(1) , (double)_z_omega(2) );
+
+       _printing_time = 0;
+  }
+
+  */
+
+  
+
+
 	
-	Vector3f temp2; 
-	temp2 = temp.cross(temp1);
 
-	Vector<3> temp3(temp2(0), temp2(1), temp2(2));
-
-	Vector<3> Gamma_C;
-	Gamma_C = -(J * K)*Omega_tilde - temp3;
-	
-	_Gamma_c_x = Gamma_C(0);
-	_Gamma_c_y = Gamma_C(1);
- 	_Gamma_c_z = Gamma_C(2);
+  
 
  	//PX4_INFO("Debug Gamma_c: %1.6f  %1.6f  %1.6f", (double)_Gamma_c_x , (double)_Gamma_c_y , (double)_Gamma_c_z );
  	//PX4_INFO("Debug Sensor_gyro: %1.6f  %1.6f  %1.6f", (double)_sensor_gyro.x , (double)_sensor_gyro.y , (double)_sensor_gyro.z);
@@ -1239,6 +1580,9 @@ AUVAttitudeControl::task_main()
 
  	//_sensor_gyro_sub = orb_subscribe(ORB_ID(sensor_gyro));
  	_sensor_combined_sub = orb_subscribe(ORB_ID(sensor_combined));
+
+  _v_force_sp_sub  = orb_subscribe(ORB_ID(vehicle_force_setpoint));
+  _position_sp_sub = orb_subscribe(ORB_ID(position_setpoint));
 
 
  	_optical_flow_p_pub = orb_advertise(ORB_ID(optical_flow), &_optical_flow_p_sp); //  _press_topic;
@@ -1397,12 +1741,12 @@ AUVAttitudeControl::task_main()
 
 			//lhnguyen debug: do not use this guard
 			// guard against too small (< 2ms) and too large (> 20ms) dt's 
-			//if (dt < 0.002f) {
-			//	dt = 0.002f;
+			if (dt < 0.002f) {
+				dt = 0.002f;
 
-			//} else if (dt > 0.02f) {
-			//	dt = 0.02f;
-			//}	
+			} else if (dt > 0.05f) {
+				dt = 0.05f;
+			}	
 	
           /*
      			struct vehicle_rates_setpoint_s raw;
@@ -1489,6 +1833,13 @@ AUVAttitudeControl::task_main()
     		//Change direction  of thruster 5 (throttle[4]) to fit with long watertight body
     		throttle[4] = +1.0*throttle[4]; //Throttle 5
 
+        /*
+        if (_printing_time > 99) {
+          PX4_INFO("Debug Throttle: %1.6f  %1.6f  %1.6f  %1.6f  %1.6f  %1.6f", (double)throttle[0] , (double)throttle[1] , (double)throttle[2], (double)throttle[3] , (double)throttle[4] , (double)throttle[5] );
+       ;
+        }
+        */
+
           /*
         	//lhnguyen debug: Send throttle
         	_optical_flow_p_sp.pixel_flow_x_integral  =         throttle[0]   ;//           
@@ -1552,6 +1903,16 @@ AUVAttitudeControl::task_main()
 
    		 perf_end(_loop_perf);
   	}
+
+  
+  orb_unsubscribe(_v_rates_sp_sub);
+  orb_unsubscribe(_pressure_sub);
+  orb_unsubscribe(_v_att_sp_sub);
+  orb_unsubscribe(_v_att_sub);
+  orb_unsubscribe(_sensor_combined_sub);
+  orb_unsubscribe(_v_force_sp_sub);
+
+
  	 _control_task = -1;
   	return 0;
 
@@ -1568,7 +1929,7 @@ AUVAttitudeControl::start()
   _control_task = px4_task_spawn_cmd("auv_att_control",
              SCHED_DEFAULT,
              SCHED_PRIORITY_MAX - 5,
-             1700,
+             2500,
              (px4_main_t)&AUVAttitudeControl::task_main_trampoline,
              nullptr);
 
