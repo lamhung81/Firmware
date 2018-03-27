@@ -776,13 +776,15 @@ AUVAttitudeControl::control_att(float dt)
   orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
   orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
 
-  //                                           NED                   0.5                  0.6                      0.7
-  //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+  if (_printing_time%10 ==0) {
 
-  //                                           ENU                   0.6                  0.5                     -0.7
-  PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
-  PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+    //                                           NED                   0.5                  0.6                      0.7
+    //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
 
+    //                                           ENU                   0.6                  0.5                     -0.7
+    PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+    PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+  }
 
 	Quaternion Q_temp = _v_att.q;
 	Matrix<3, 3> R_hat    = Q_temp.to_dcm();
@@ -849,7 +851,9 @@ AUVAttitudeControl::control_att(float dt)
 	*/
 	
   _Fcx_manual = 5.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
-
+  if (_printing_time%10 ==0) {    
+    PX4_INFO("Debug throttle: %1.6f ", (double)_Fcx_manual );
+  }
 
 
 
@@ -922,7 +926,15 @@ AUVAttitudeControl::control_att(float dt)
   //Anti wind-up integrator
   Vector<3> z_omega_dot = (- _z_omega  + sat3Function (_z_omega + Omega_tilde, 0.8f) ) *2.0f ;
 
-  _z_omega     += z_omega_dot*dt; 
+  _z_omega     += z_omega_dot*dt;   //Need to verify if it is two big that leads to over memory capability
+
+  _z_omega = sat3Function(_z_omega, 20.0f);
+
+  if (_printing_time%10 ==0) {
+    PX4_INFO("_z_omega: %1.6f %1.6f %1.6f %2d ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) , sizeof(int));
+  }
+  
+
    
   Vector<3>  G_feedforward;  
   G_feedforward = (J*Omega) % Omega_d - J*Omega_d_dot; 
@@ -1252,6 +1264,11 @@ AUVAttitudeControl::task_main()
       			}                 
     		}
 
+        _printing_time ++;
+        if (_printing_time > 10000) {
+          _printing_time = 0;
+        }
+
 
    	 	#ifdef __PX4_NUTTX
       		/* Trigger all timer's channels in Oneshot mode to fire
@@ -1264,6 +1281,15 @@ AUVAttitudeControl::task_main()
 
    		 perf_end(_loop_perf);
   	}
+
+    orb_unsubscribe(_v_rates_sp_sub);
+    orb_unsubscribe(_pressure_sub);
+    orb_unsubscribe(_v_att_sp_sub);
+    orb_unsubscribe(_v_att_sub);    
+    orb_unsubscribe(_sensor_combined_sub);
+    orb_unsubscribe(_v_force_sp_sub);
+    orb_unsubscribe(_position_sp_sub);
+
  	 _control_task = -1;
   	return 0;
 

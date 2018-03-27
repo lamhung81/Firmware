@@ -119,6 +119,7 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_att_sp_pub(nullptr),
 	_rates_sp_pub(nullptr),
 	_force_sp_pub(nullptr),
+	_position_sp_pub(nullptr),  //lhnguyen
 	_pos_sp_triplet_pub(nullptr),
 	_att_pos_mocap_pub(nullptr),
 	_vision_position_pub(nullptr),
@@ -144,6 +145,8 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_offboard_control_mode{},
 	_att_sp{},
 	_rates_sp{},
+	_force_sp_lhnguyen{},
+	_position_sp_lhnguyen{},
 	//_manual_sp{},
 	_time_offset_avg_alpha(0.8),
 	_time_offset(0),
@@ -856,6 +859,65 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 
 	*/
 	//end of lhnguyen debug
+
+	static uint8_t flag = 0;
+	bool tignore_acceleration_force = (bool)(set_position_target_local_ned.type_mask & 0x1C0);
+
+	if (!tignore_acceleration_force){
+		_force_sp_lhnguyen.x = set_position_target_local_ned.afx;
+		_force_sp_lhnguyen.y = set_position_target_local_ned.afy;
+		_force_sp_lhnguyen.z = set_position_target_local_ned.afz;
+		flag |= 0x7;
+	}
+
+	if (_force_sp_pub == nullptr){
+		_force_sp_pub = orb_advertise(ORB_ID(vehicle_force_setpoint), &_force_sp_lhnguyen);
+	}
+	else{
+		if (flag == 0x7){
+			orb_publish(ORB_ID(vehicle_force_setpoint), _force_sp_pub, &_force_sp_lhnguyen);
+			flag = 0;
+		}
+	}
+
+	static uint8_t flag2 = 0;
+	bool tignore_position = (bool)(set_position_target_local_ned.type_mask & 0x7);
+	if (!tignore_position){
+		_position_sp_lhnguyen.x = set_position_target_local_ned.x;
+		_position_sp_lhnguyen.y = set_position_target_local_ned.y;
+		_position_sp_lhnguyen.z = set_position_target_local_ned.z;
+		flag2 |= 0x7;
+	}
+	/*
+	if (_position_sp_pub == nullptr){
+		_position_sp_pub = orb_advertise(ORB_ID(position_setpoint), &_position_sp_lhnguyen);
+	}
+	else{
+		if (flag2 == 0x7){
+			orb_publish(ORB_ID(position_setpoint), _position_sp_pub, &_position_sp_lhnguyen);
+			flag2 = 0;
+		}
+	}
+	*/
+
+	//static uint8_t flag3 = 0;
+	bool tignore_velocity = (bool)(set_position_target_local_ned.type_mask & 0x38);
+	if (!tignore_velocity){
+		_position_sp_lhnguyen.vx = set_position_target_local_ned.vx;
+		_position_sp_lhnguyen.vy = set_position_target_local_ned.vy;
+		_position_sp_lhnguyen.vz = set_position_target_local_ned.vz;
+		flag2 |= 0x38;
+	}
+
+	if (_position_sp_pub == nullptr){
+		_position_sp_pub = orb_advertise(ORB_ID(position_setpoint), &_position_sp_lhnguyen);
+	}
+	else{	
+		if (flag2 == 0x3f){
+			orb_publish(ORB_ID(position_setpoint), _position_sp_pub, &_position_sp_lhnguyen);
+			flag2 = 0;
+		}
+	}
 
 	struct offboard_control_mode_s offboard_control_mode = {};
 
