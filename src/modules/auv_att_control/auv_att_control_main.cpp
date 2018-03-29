@@ -46,7 +46,7 @@
 #include "systemlib/param/param.h"
 #include "drivers/drv_pwm_output.h"
 
-#include <uORB/topics/vehicle_rates_setpoint.h>
+//#include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/uORB.h>
 
 #include <conversion/rotation.h>
@@ -59,10 +59,10 @@
 #include <px4_posix.h>
 #include <px4_tasks.h>
 #include <systemlib/circuit_breaker.h>
-#include <systemlib/err.h>
-#include <systemlib/param/param.h>
+//#include <systemlib/err.h>
+//#include <systemlib/param/param.h>
 #include <systemlib/perf_counter.h>
-#include <systemlib/systemlib.h>
+//#include <systemlib/systemlib.h>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/battery_status.h>
@@ -82,7 +82,7 @@
 #include <uORB/uORB.h>
 #include <uORB/topics/pressure.h>
 #include <uORB/topics/optical_flow.h>  //lhnguyen debug: low pass filter for depth and depth velocity estimation
-#include <uORB/topics/manual_control_setpoint.h>
+//#include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/vehicle_force_setpoint.h>
 #include <uORB/topics/position_setpoint.h>
 
@@ -632,7 +632,9 @@ AUVAttitudeControl::control_depth(float dt)
 		_vzr = (float) 0.0;
 	}
 
-    PX4_INFO("Debug depth input: _zr  _vzr  dt: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
+    if (_printing_time%10 ==0) {   
+        PX4_INFO("Debug depth input: _zr  _vzr  dt: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
+    }
     
     /* 
     //Control without integrator
