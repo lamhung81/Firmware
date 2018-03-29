@@ -142,15 +142,15 @@ private:
   	
 	float 	_vzr;
 	float   _zr;
-  float   _Fcx;
-  float   _Fcy;
+    float   _Fcx;
+    float   _Fcy;
 	float 	_Fcz;
-  float   _Fcx_manual;
-  float   _z_depth;
+    float   _Fcx_manual;
+    float   _z_depth;
 
-  Vector<3> _z_omega;
-  Vector<3> _Omega_hat;
-  Vector<3> _Delta_G_hat;
+    Vector<3> _z_omega;
+    Vector<3> _Omega_hat;
+    Vector<3> _Delta_G_hat;
 
 
 	float   _Gamma_c_x;
@@ -510,45 +510,45 @@ void
 AUVAttitudeControl::depth_estimate(float dt)
 {
 	float k1 = 10.0; //20.0;//2.0;
-    	float k2 = 25.0; //100.0;//1.0;
+    float k2 = 25.0; //100.0;//1.0;
         
-    	//double u = 0.0; //depth velocity
-    	//float pressure_zero_level = 1030; 
-    	float pressure_zero_level = 997.0; //1027.0; //980;
+    //double u = 0.0; //depth velocity
+    //float pressure_zero_level = 1030; 
+    float pressure_zero_level = 997.0; //1027.0; //980;
 
 	//depth and depth velocity observator
-        // x = (_pressure - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
-        // x_hat_dot = u_hat + k1*(x - x_hat);
-        // u_hat_dot = k2*(x - x_hat);
-        // x_hat += x_hat_dot*dt;
-        // u_hat += u_hat_dot*dt; 
+    // x = (_pressure - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
+    // x_hat_dot = u_hat + k1*(x - x_hat);
+    // u_hat_dot = k2*(x - x_hat);
+    // x_hat += x_hat_dot*dt;
+    // u_hat += u_hat_dot*dt; 
 
-        //o_f_p.pixel_flow_x_integral  = x_hat;                             //depth
-        //o_f_p.pixel_flow_y_integral  = (float)-1.0*u_hat;        //depth velocity
+    //o_f_p.pixel_flow_x_integral  = x_hat;                             //depth
+    //o_f_p.pixel_flow_y_integral  = (float)-1.0*u_hat;        //depth velocity
 
-        float 	x_hat_dot = 0.0;
-        float 	u_hat_dot = 0.0;
-        float 	_depth_measured = 0.0;
+    float 	x_hat_dot = 0.0;
+    float 	u_hat_dot = 0.0;
+    float 	_depth_measured = 0.0;
 
-        orb_copy(ORB_ID(pressure), _pressure_sub, &_pressure);
+    orb_copy(ORB_ID(pressure), _pressure_sub, &_pressure);
 
-        _depth_measured     = (_pressure.pressure_mbar - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
-        x_hat_dot           = _v_depth_estimated + k1*(_depth_measured - _depth_estimated);
-        u_hat_dot           = k2*(_depth_measured - _depth_estimated);
-        _depth_estimated   += x_hat_dot*dt;
-        _v_depth_estimated += u_hat_dot*dt; 
+    _depth_measured     = (_pressure.pressure_mbar - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
+    x_hat_dot           = _v_depth_estimated + k1*(_depth_measured - _depth_estimated);
+    u_hat_dot           = k2*(_depth_measured - _depth_estimated);
+    _depth_estimated   += x_hat_dot*dt;
+    _v_depth_estimated += u_hat_dot*dt; 
 
-    	//PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
+    //PX4_INFO("Debug depth 1: %1.6f  %1.6f  %1.6f", (double)_depth_measured, (double) _depth_estimated, (double)_v_depth_estimated);
 
         
-    	//lhnguyen debug: publish by hi-jacking optical flow message 
-    	_optical_flow_p_sp.pixel_flow_x_integral  =             _depth_estimated;          //depth
-      _optical_flow_p_sp.pixel_flow_y_integral  =       -1.0f*_v_depth_estimated;        //depth velocity
+    //lhnguyen debug: publish by hi-jacking optical flow message 
+    //_optical_flow_p_sp.pixel_flow_x_integral  =             _depth_estimated;          //depth
+    //_optical_flow_p_sp.pixel_flow_y_integral  =       -1.0f*_v_depth_estimated;        //depth velocity
 
-      _optical_flow_p_sp.timestamp = hrt_absolute_time();
-      // _replay_mode ? now : hrt_absolute_time();
+    //_optical_flow_p_sp.timestamp = hrt_absolute_time();
+    // _replay_mode ? now : hrt_absolute_time();
 	
-      orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
+    //orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
 	
 }
 
@@ -557,52 +557,52 @@ void
 AUVAttitudeControl::control_depth(float dt)
 {       
 
-  /*
-  orb_copy(ORB_ID(manual_control_setpoint), _manual_control_sp_sub, &_manual_control_sp);
+    /*
+    orb_copy(ORB_ID(manual_control_setpoint), _manual_control_sp_sub, &_manual_control_sp);
 
-  float gia_tri = (float)1.0 * _manual_control_sp.x;
-  PX4_INFO("Debug gui gia tri: %1.6f  ", (double)gia_tri);
+    float gia_tri = (float)1.0 * _manual_control_sp.x;
+    PX4_INFO("Debug gui gia tri: %1.6f  ", (double)gia_tri);
 	
-  _vzr = gia_tri;
-  */
+    _vzr = gia_tri;
+    */
       	/*
 	//vehicle_rates_setpoint_poll();  //lhnguyen: ko lam viec
 	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 	_vzr =(float)-1.0*_v_rates_sp.thrust;  
 	*/
 
-  orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
-  if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] > -0.5f) ) {
+    orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
+    if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] > -0.5f) ) {
 
           //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
           _vzr =            (float)1.0; //  _v_att_sp.q_d[0];
 
           }
 
-  if ((_v_att_sp.q_d[0] > -0.5f) && (_v_att_sp.q_d[3] < -0.5f) ) {
+    if ((_v_att_sp.q_d[0] > -0.5f) && (_v_att_sp.q_d[3] < -0.5f) ) {
 
           //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
           _vzr =(float) -1.0; //(float)-1.0* _v_att_sp.q_d[0];
 
           }
-   if ((_v_att_sp.q_d[0] > -0.5f) && (_v_att_sp.q_d[3] > -0.5f) ) {
+    if ((_v_att_sp.q_d[0] > -0.5f) && (_v_att_sp.q_d[3] > -0.5f) ) {
 
           //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
           _vzr =              (float) 0.0;
 
           }
 
-   if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] < -0.5f) ) {
+    if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] < -0.5f) ) {
 
           //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
           _vzr =              (float) 0.0;
 
           }
 
-   //PX4_INFO("Reference depth velocity  %1.6f ", (double) _vzr );
+    //PX4_INFO("Reference depth velocity  %1.6f ", (double) _vzr );
 	
 
-  //_vzr = 0.0f;
+    //_vzr = 0.0f;
 
 	//Apply deadband
 	//_vzr = joystick_deadband(_vzr,0.1);
@@ -613,9 +613,13 @@ AUVAttitudeControl::control_depth(float dt)
 	//Update reference depth value
 	_zr += _vzr*dt;  
 
-  //
-  float depth_top = 0.1;
-  float depth_bottom = 1.0;
+    if (_printing_time%10 ==0) {    
+        PX4_INFO("Debug _zr _vzr: %1.6f  %1.6f ", (double)_zr , (double)_vzr );   
+    }
+
+    //
+    float depth_top = 0.1;
+    float depth_bottom = 1.0;
 
 	//limit min and max depth 
 	if (_zr <= depth_top){
@@ -628,8 +632,10 @@ AUVAttitudeControl::control_depth(float dt)
 		_vzr = (float) 0.0;
 	}
 
-  /* 
-  //Control without integrator
+    PX4_INFO("Debug depth input: _zr  _vzr  dt: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
+    
+    /* 
+    //Control without integrator
 
 	//Control gains
 	float kp = 2.0; //3.0;
@@ -641,95 +647,137 @@ AUVAttitudeControl::control_depth(float dt)
 	_Fcz = mass_total*(-kp*(_depth_estimated - _zr) - kd*(_v_depth_estimated - _vzr));
 
 	//PX4_INFO("Debug depth 2: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
-  */
+    */
 
-  //Control with integrator
+    //Control with integrator
 
- orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
+    orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
   
-  //orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
-  orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
+    //orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
+    orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
   
-  //For referent angular velocites and thrust
-  orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+    //For referent angular velocites and thrust
+    orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+
+    /*
+    orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
+    orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
+
+    if (_printing_time%10 ==0) {
+
+        //                                           NED                   0.5                  0.6                      0.7
+        //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+
+        //                                           ENU                   0.6                  0.5                     -0.7
+        PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+        PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+    }
+    */
 
 
-  Quaternion Q_temp = _v_att.q;
-  Matrix<3, 3> R    = Q_temp.to_dcm();
+    Quaternion Q_temp = _v_att.q;
+    Matrix<3, 3> R    = Q_temp.to_dcm();
    
-  Matrix<3, 3> R_hat = R.transposed();
+    Matrix<3, 3> R_hat = R.transposed();
 
-  Vector<3> e3(0.0f, 0.0f, 1.0f);
-  Vector<3> gamma = R_hat * e3;
+    Vector<3> e3(0.0f, 0.0f, 1.0f);
+    Vector<3> gamma = R_hat * e3;
 
+    //lhnguyen debugging print
+    if (_printing_time%10 ==0) {
+        PX4_INFO("Debug depth gamma: %1.6f  %1.6f  %1.6f", (double)gamma(0), (double)gamma(1), (double)gamma(2));
+    }
+       
+    //Assume that pressure sensor P is exactly on vertical symmestrical plane
+    float d_PP1 = 0.01; // Distance from pressure sensor to projection point P1, along z axe, in meter
+    float L_P1B = 0.3;  // Distance from projection P1 to center of boyancy, along x axe, in meter
 
-  //Assume that pressure sensor P is exactly on vertical symmestrical plane
-  float d_PP1 = 0.01; // Distance from pressure sensor to projection point P1, along z axe, in meter
-  float L_P1B = 0.3;  // Distance from projection P1 to center of boyancy, along x axe, in meter
+    //Depth control is according to center of boyancy.
+    //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
+    //
 
-  //Depth control is according to center of boyancy.
-  //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
-  //
+    float omega_1  = _v_att.rollspeed;
+    float omega_2  = _v_att.pitchspeed; 
+    float omega_3  = _v_att.yawspeed;
 
-  float omega_1  = _v_att.rollspeed;
-  float omega_2  = _v_att.pitchspeed; 
-  float omega_3  = _v_att.yawspeed;
+    //lhnguyen debugging print
+    if (_printing_time%10 ==0) {
+        PX4_INFO("Debug depth omega: %1.6f  %1.6f  %1.6f", (double)omega_1, (double)omega_2, (double)omega_3);
+    }
 
-  //float temp_A = omega_1*R(1,0) - omega_2*(R(0,0) + R(2,2)) + omega_3*R(2,1);
-  //float temp_C = omega_1*(R(1,2) - R(2,1)) + omega_2*(R(2,0) - R(0,2));
+    //float temp_A = omega_1*R(1,0) - omega_2*(R(0,0) + R(2,2)) + omega_3*R(2,1);
+    //float temp_C = omega_1*(R(1,2) - R(2,1)) + omega_2*(R(2,0) - R(0,2));
 
-  float temp_A = omega_3*R(2,1) - omega_2*R(2,2);
-  float temp_C = omega_2*R(2,0) - omega_1*R(2,1);
+    float temp_A = omega_3*R(2,1) - omega_2*R(2,2);
+    float temp_C = omega_2*R(2,0) - omega_1*R(2,1);
 
-  float depth_B   = (float)_depth_estimated   + R(2,0)*L_P1B  + R(2,2)*d_PP1; // AUV depth measured at the centre of boyancy
-  float v_depth_B = (float)_v_depth_estimated + temp_A*L_P1B  + temp_C*d_PP1; //AUV depth velocity measured at the centre of boyancy
+    float depth_B   = (float)_depth_estimated   + R(2,0)*L_P1B  + R(2,2)*d_PP1; // AUV depth measured at the centre of boyancy
+    float v_depth_B = (float)_v_depth_estimated + temp_A*L_P1B  + temp_C*d_PP1; //AUV depth velocity measured at the centre of boyancy
 
-
-  /* The following paragraph of code is not good since the rollspeed, pitchspeed and yawspeed in vehicle_attitude message are omega_1, omega_2 and omega_3
-  // They are not derivatives of roll, pitch and yaw angles.
-  // The given names are confusing!!!!
-
-  double roll_velocity  = _v_att.rollspeed;
-  double pitch_velocity = _v_att.pitchspeed; 
-  Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
-  float roll  = Euler_angle_in_rad(0);
-  float pitch = Euler_angle_in_rad(1);  
-
-  //Depth control is according to center of boyancy.
-  //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
-  //
-  double depth_B   = (double)_depth_estimated + d_PP1*cos(roll)*cos(pitch) - L_P1B*sin(pitch); // AUV depth measured at the centre of boyancy
-  double v_depth_B = (double)_v_depth_estimated - d_PP1*sin(roll)*cos(pitch)*roll_velocity -(d_PP1*cos(roll)*sin(pitch) + L_P1B*cos(pitch))*pitch_velocity; //AUV depth velocity measured at the centre of boyancy
-
-  */
-
-  depth_estimate(dt);
-  float h_tilde  = (float)depth_B - _zr;
-  float hr_dot   = 0.0; //_vzr; because the joystick do not give the good value by using two buttons as above
-  float k1_depth = 1.0;
-
-  float vzd = - k1_depth* h_tilde + hr_dot;
-
-  float vzd_dot = 0.0; // = - k1_depth* (v_depth_B - hr_dot) + hr_ddot; //hr_ddot = 0;
-
-  float k2_depth      = 1.4142;
-  float delta_z_depth = 0.8;
-  float kz_depth      = 2.0;
-
-  float vz_tilde    = (float)v_depth_B - vzd;
-  float vz_bar      = vz_tilde + _z_depth;
-  float z_depth_dot = kz_depth*(-_z_depth + satFunction(vz_bar, delta_z_depth));
-
-  _z_depth += z_depth_dot*dt;
-
-  float Fcz_Inertial = 19.0f* (vzd_dot + satFunction(-k2_depth*vz_bar,0.5) - z_depth_dot);  //mz = 19.0 kg
+    //lhnguyen debugging print
+    if (_printing_time%10 ==0) {
+        PX4_INFO("Debug depth depthB v_depth_B: %1.6f  %1.6f ", (double)depth_B, (double)v_depth_B);
+    }
 
 
-  //Fc_Intertial = (0.0f, 0.0f, Fcz_Inertial) = e3*Fcz_Inertial;
-  Vector<3> Fc_body = gamma*Fcz_Inertial;
-  _Fcx = Fc_body(0);
-  _Fcy = Fc_body(1);
-  _Fcz = Fc_body(2);
+    /* The following paragraph of code is not good since the rollspeed, pitchspeed and yawspeed in vehicle_attitude message are omega_1, omega_2 and omega_3
+    // They are not derivatives of roll, pitch and yaw angles.
+    // The given names are confusing!!!!
+
+    double roll_velocity  = _v_att.rollspeed;
+    double pitch_velocity = _v_att.pitchspeed; 
+    Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
+    float roll  = Euler_angle_in_rad(0);
+    float pitch = Euler_angle_in_rad(1);  
+
+    //Depth control is according to center of boyancy.
+    //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
+    //
+    double depth_B   = (double)_depth_estimated + d_PP1*cos(roll)*cos(pitch) - L_P1B*sin(pitch); // AUV depth measured at the centre of boyancy
+    double v_depth_B = (double)_v_depth_estimated - d_PP1*sin(roll)*cos(pitch)*roll_velocity -(d_PP1*cos(roll)*sin(pitch) + L_P1B*cos(pitch))*pitch_velocity; //AUV depth velocity measured at the centre of boyancy
+    */
+
+    depth_estimate(dt);
+    float h_tilde  = (float)depth_B - _zr;
+    float hr_dot   = 0.0; //_vzr; because the joystick do not give the good value by using two buttons as above
+    float k1_depth = 1.0;
+
+    float vzd = - k1_depth* h_tilde + hr_dot;
+
+    float vzd_dot = 0.0; // = - k1_depth* (v_depth_B - hr_dot) + hr_ddot; //hr_ddot = 0;
+
+    float k2_depth      = 1.4142;
+    float delta_z_depth = 0.8;
+    float kz_depth      = 2.0;
+
+    float vz_tilde    = (float)v_depth_B - vzd;
+    float vz_bar      = vz_tilde + _z_depth;
+    float z_depth_dot = kz_depth*(-_z_depth + satFunction(vz_bar, delta_z_depth));
+
+    _z_depth += z_depth_dot*dt;
+    _z_depth = satFunction(_z_depth, 5.0f); //For safety, not growing too much
+
+
+    if (_printing_time%10 ==0) {    
+        PX4_INFO("Debug _z_depth  z_depth_dot: %1.6f  %1.6f ", (double)_z_depth , (double)z_depth_dot );   
+    }
+
+    float Fcz_Inertial = 19.0f* (vzd_dot + satFunction(-k2_depth*vz_bar,0.5) - z_depth_dot);  //mz = 19.0 kg
+
+
+    //Fc_Intertial = (0.0f, 0.0f, Fcz_Inertial) = e3*Fcz_Inertial;
+    Vector<3> Fc_body = gamma*Fcz_Inertial;
+
+
+    //lhnguyen debugging print
+    if (_printing_time%10 ==0) {
+        PX4_INFO("Debug Fc_body: %1.6f  %1.6f  %1.6f", (double)Fc_body(0), (double)Fc_body(1), (double)Fc_body(2));
+    }
+ 
+    //Taking into account actuator limits
+    _Fcx = satFunction(Fc_body(0), 30.0f);
+    _Fcy = satFunction(Fc_body(1), 10.0f);
+    _Fcz = satFunction(Fc_body(2), 40.0f);
 
 }
 
@@ -773,18 +821,18 @@ AUVAttitudeControl::control_att(float dt)
 	//For referent angular velocites and thrust
 	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 
-  orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
-  orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
+    orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
+    orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
 
-  if (_printing_time%10 ==0) {
+    if (_printing_time%10 ==0) {
 
-    //                                           NED                   0.5                  0.6                      0.7
-    //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+        //                                           NED                   0.5                  0.6                      0.7
+        //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
 
-    //                                           ENU                   0.6                  0.5                     -0.7
-    PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
-    PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
-  }
+        //                                           ENU                   0.6                  0.5                     -0.7
+        PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+        PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+    }
 
 	Quaternion Q_temp = _v_att.q;
 	Matrix<3, 3> R_hat    = Q_temp.to_dcm();
@@ -926,8 +974,8 @@ AUVAttitudeControl::control_att(float dt)
   //Anti wind-up integrator
   Vector<3> z_omega_dot = (- _z_omega  + sat3Function (_z_omega + Omega_tilde, 0.8f) ) *2.0f ;
 
-  _z_omega     += z_omega_dot*dt;   //Need to verify if it is two big that leads to over memory capability
-
+  _z_omega     += z_omega_dot*dt;   
+  //Need to verify if it is two big that leads to over memory capability
   _z_omega = sat3Function(_z_omega, 20.0f);
 
   if (_printing_time%10 ==0) {
@@ -1003,6 +1051,9 @@ AUVAttitudeControl::task_main()
 
  	//_sensor_gyro_sub = orb_subscribe(ORB_ID(sensor_gyro));
  	_sensor_combined_sub = orb_subscribe(ORB_ID(sensor_combined));
+
+    _v_force_sp_sub = orb_subscribe(ORB_ID(vehicle_force_setpoint));
+    _position_sp_sub = orb_subscribe(ORB_ID(position_setpoint));
 
 
  	_optical_flow_p_pub = orb_advertise(ORB_ID(optical_flow), &_optical_flow_p_sp); //  _press_topic;
@@ -1197,8 +1248,8 @@ AUVAttitudeControl::task_main()
       			// Moment[1] =  (float)2.0*raw.pitch;    
       			// Moment[2] =  (float)2.0*raw.yaw;   
 
-			      //Attitude control, calculate _Gamma_c_x, _Gamma_c_y, _Gamma_c_z
-			      control_att(dt); 
+			     //Attitude control, calculate _Gamma_c_x, _Gamma_c_y, _Gamma_c_z
+			 // control_att(dt); 
 
       			Force[0]  =  1.0f*_Fcx + 1.0f*_Fcx_manual;
       			Force[1]  =  1.0f*_Fcy; 
