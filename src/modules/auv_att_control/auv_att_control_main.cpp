@@ -140,7 +140,7 @@ private:
 	float 	_depth_estimated;
 	float 	_v_depth_estimated; 
 
-    int _printing_time;
+    int     _printing_time;
 
 
   	int   	_armed_sub;       /**< arming status subscription */
@@ -518,6 +518,10 @@ AUVAttitudeControl::control_depth(float dt)
 	//Update reference depth value
 	_zr += _vzr*dt;  
 
+    //if (_printing_time%10 ==0) {    
+        PX4_INFO("Debug _zr _vzr: %1.6f  %1.6f ", (double)_zr , (double)_vzr );   
+    //}
+
 	float depth_top = 0.1;
     float depth_bottom = 1.0;
 
@@ -532,6 +536,9 @@ AUVAttitudeControl::control_depth(float dt)
         _vzr = (float) 0.0;
     }
 
+    //if (_printing_time%10 ==0) {   
+    //    PX4_INFO("Debug depth input: _zr  _vzr  dt: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
+    //}
 
     orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
   
@@ -659,12 +666,14 @@ AUVAttitudeControl::control_att(float dt)
     orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
     orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
 
-    //                                           NED                   0.5                  0.6                      0.7
-    //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+    if (_printing_time%10 ==0) { 
+        //                                           NED                   0.5                  0.6                      0.7
+        //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
 
-    //                                           ENU                   0.6                  0.5                     -0.7
-    PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
-    PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+        //                                           ENU                   0.6                  0.5                     -0.7
+        PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+        PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+    }
 
 	Quaternion Q_temp = _v_att.q;
 	Matrix<3, 3> R_hat    = Q_temp.to_dcm();
@@ -1042,7 +1051,15 @@ AUVAttitudeControl::task_main()
     	#endif
 
    		perf_end(_loop_perf);
-  	}
+
+        
+        _printing_time ++;
+        if (_printing_time > 10000) {
+          _printing_time = 0;
+        }
+        
+
+  	} //End of while (!_task_should_exit)
 
     orb_unsubscribe(_v_rates_sp_sub);
     orb_unsubscribe(_pressure_sub);
