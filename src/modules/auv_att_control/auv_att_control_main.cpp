@@ -487,6 +487,10 @@ AUVAttitudeControl::control_depth(float dt)
 {       
 
     orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
+
+    PX4_INFO("Emergency stop from joystick %1.6f  %1.6f %1.6f  %1.6f", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[1], (double) _v_att_sp.q_d[2], (double) _v_att_sp.q_d[3] );
+
+    /*
     if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] > -0.5f) ) {
 
         //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
@@ -510,7 +514,23 @@ AUVAttitudeControl::control_depth(float dt)
         //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
         _vzr =              (float) 0.0;
     }
+    */
 
+    if ((  abs(_v_att_sp.q_d[2]) < 0.1f) && (_v_att_sp.q_d[1] > -0.5f) ) {
+          _vzr =            0.0f;  //Do not change reference depth when LB = 0 , RB = 0
+    }
+
+    if ((  abs(_v_att_sp.q_d[2]) < 0.1f) && (_v_att_sp.q_d[1] < -0.5f) ) {
+          _vzr =            -1.0f; //Go up when LB = 1, RB = 1
+    }
+
+    if (  _v_att_sp.q_d[2] > 0.1f)  {         
+          _vzr =            -1.0f;  //Go up when RB = 1, LB = 0
+    }
+
+    if (  _v_att_sp.q_d[2] < -0.1f)  {         
+          _vzr =            1.0f;   //Go down when RB = 0, LB = 1
+    }
   
 	// choose 0.1 for smaller reference depth velocity input from joystick
 	_vzr = (float)0.1*_vzr;
