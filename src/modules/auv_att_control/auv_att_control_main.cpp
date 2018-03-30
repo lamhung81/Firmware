@@ -555,49 +555,25 @@ AUVAttitudeControl::depth_estimate(float dt)
 
 void
 AUVAttitudeControl::control_depth(float dt)
-{       
-
-    /*
-    orb_copy(ORB_ID(manual_control_setpoint), _manual_control_sp_sub, &_manual_control_sp);
-
-    float gia_tri = (float)1.0 * _manual_control_sp.x;
-    PX4_INFO("Debug gui gia tri: %1.6f  ", (double)gia_tri);
-	
-    _vzr = gia_tri;
-    */
-      	/*
-	//vehicle_rates_setpoint_poll();  //lhnguyen: ko lam viec
-	orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
-	_vzr =(float)-1.0*_v_rates_sp.thrust;  
-	*/
+{           
 
     orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
-    if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] > -0.5f) ) {
+    if ((  abs(_v_att_sp.q_d[2]) < 0.1f) && (_v_att_sp.q_d[1] > -0.5f) ) {
+          _vzr =            0.0f;  //Do not change reference depth when LB = 0 , RB = 0
+    }
 
-          //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
-          _vzr =            (float)1.0; //  _v_att_sp.q_d[0];
+    if ((  abs(_v_att_sp.q_d[2]) < 0.1f) && (_v_att_sp.q_d[1] < -0.5f) ) {
+          _vzr =            -1.0f; //Go up when LB = 1, RB = 1
+    }
 
-          }
+    if (  _v_att_sp.q_d[2] > 0.1f)  {         
+          _vzr =            -1.0f;  //Go up when RB = 1, LB = 0
+    }
 
-    if ((_v_att_sp.q_d[0] > -0.5f) && (_v_att_sp.q_d[3] < -0.5f) ) {
+    if (  _v_att_sp.q_d[2] < -0.1f)  {         
+          _vzr =            1.0f;   //Go down when RB = 0, LB = 1
+    }
 
-          //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
-          _vzr =(float) -1.0; //(float)-1.0* _v_att_sp.q_d[0];
-
-          }
-    if ((_v_att_sp.q_d[0] > -0.5f) && (_v_att_sp.q_d[3] > -0.5f) ) {
-
-          //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
-          _vzr =              (float) 0.0;
-
-          }
-
-    if ((_v_att_sp.q_d[0] < -0.5f) && (_v_att_sp.q_d[3] < -0.5f) ) {
-
-          //PX4_INFO("Emergency stop from joystick %1.6f  %1.6f ", (double) _v_att_sp.q_d[0], (double) _v_att_sp.q_d[3] );
-          _vzr =              (float) 0.0;
-
-          }
 
     //PX4_INFO("Reference depth velocity  %1.6f ", (double) _vzr );
 	
@@ -661,7 +637,7 @@ AUVAttitudeControl::control_depth(float dt)
     //For referent angular velocites and thrust
     orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 
-    /*
+    
     orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
     orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
 
@@ -674,7 +650,7 @@ AUVAttitudeControl::control_depth(float dt)
         PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
         PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
     }
-    */
+    
 
 
     Quaternion Q_temp = _v_att.q;
