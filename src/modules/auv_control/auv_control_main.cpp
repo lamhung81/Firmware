@@ -1145,9 +1145,9 @@ AUVControl::task_main()
 
     		}
 		*/
-      /*  
+        
       orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
-      if (_v_rates_sp.x > 0.5f) {
+      if (_v_rates_sp.roll > 0.5f) {
         PX4_INFO("Emergency stop from joystick");
         for (unsigned i = 0; i < 6; i++) {                          
                       
@@ -1162,7 +1162,7 @@ AUVControl::task_main()
           _task_should_exit = true;
           continue;
       }
-      */
+      
 		
 
     		/* this is undesirable but not much we can do - might want to flag unhappy status */
