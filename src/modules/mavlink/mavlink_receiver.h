@@ -245,8 +245,9 @@ private:
 	struct offboard_control_mode_s _offboard_control_mode;
 	struct vehicle_attitude_setpoint_s _att_sp;
 	struct vehicle_rates_setpoint_s _rates_sp;
-	struct vehicle_force_setpoint_s _force_sp_lhnguyen;  //lhnguyen debug
-	struct position_setpoint_s      _position_sp_lhnguyen;  //lhnguyen debug
+	struct vehicle_force_setpoint_s _force_sp_lhnguyen;            //lhnguyen debug
+	struct position_setpoint_s      _position_sp_lhnguyen;         //lhnguyen debug
+	struct actuator_controls_s      _actuator_control_lhnguyen;    //lhnguyen debug
 	//struct manual_control_setpoint_s _manual_sp;
 	double _time_offset_avg_alpha;
 	int64_t _time_offset;

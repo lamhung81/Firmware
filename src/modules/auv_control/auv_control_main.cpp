@@ -86,6 +86,8 @@
 #include <uORB/topics/vehicle_force_setpoint.h>
 #include <uORB/topics/position_setpoint.h>
 
+//#include <uORB/topics/actuator_controls.h>
+
 
 
 #include <math.h>
@@ -139,6 +141,7 @@ private:
     int     _manual_control_sp_sub;
     int     _v_force_sp_sub;
     int     _position_sp_sub;
+    int     _actuator_control_lhnguyen_sub;
   	
 	float 	_vzr;
 	float   _zr;
@@ -174,6 +177,8 @@ private:
   	struct  manual_control_setpoint_s    _manual_control_sp;
   	struct  vehicle_force_setpoint_s     _v_force_sp;
     struct  position_setpoint_s          _position_sp;
+    struct  actuator_controls_s          _actuator_control_lhnguyen;
+   
   	
   	struct 	actuator_armed_s       _armed;             /**< actuator arming status */
 
@@ -261,6 +266,7 @@ AUVControl::AUVControl():
   _manual_control_sp{},
   _v_force_sp{},
   _position_sp{},
+  _actuator_control_lhnguyen{},
   
   _armed{},
 
@@ -640,6 +646,7 @@ AUVControl::control_depth(float dt)
     
     orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
     orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
+    orb_copy(ORB_ID(actuator_controls), _actuator_control_lhnguyen_sub, &_actuator_control_lhnguyen);
 
     if (_printing_time%10 ==0) {
 
@@ -649,6 +656,7 @@ AUVControl::control_depth(float dt)
         //                                           ENU                   0.6                  0.5                     -0.7
         PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
         PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+        PX4_INFO("Debug actuator: %1.6f ", (double)_actuator_control_lhnguyen.control[0]);
     }
     
 
@@ -706,7 +714,7 @@ AUVControl::control_depth(float dt)
     double pitch_velocity = _v_att.pitchspeed; 
     Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
     float roll  = Euler_angle_in_rad(0);
-    float pitch = Euler_angle_in_rad(1);  
+    float pitch = Euler_angle_in_rad(1);  Fc_b
 
     //Depth control is according to center of boyancy.
     //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
@@ -801,6 +809,7 @@ AUVControl::control_att(float dt)
 
     orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
     orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
+    orb_copy(ORB_ID(actuator_controls), _actuator_control_lhnguyen_sub, &_actuator_control_lhnguyen);
 
     if (_printing_time%10 ==0) {
 
@@ -810,7 +819,9 @@ AUVControl::control_att(float dt)
         //                                           ENU                   0.6                  0.5                     -0.7
         PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
         PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+        PX4_INFO("Debug actuator: %1.6f ", (double)_actuator_control_lhnguyen.control[0]);
     }
+
 
 	Quaternion Q_temp = _v_att.q;
 	Matrix<3, 3> R_hat    = Q_temp.to_dcm();
@@ -1033,6 +1044,8 @@ AUVControl::task_main()
     _v_force_sp_sub = orb_subscribe(ORB_ID(vehicle_force_setpoint));
     _position_sp_sub = orb_subscribe(ORB_ID(position_setpoint));
 
+    _actuator_control_lhnguyen_sub = orb_subscribe(ORB_ID(actuator_controls));
+
 
  	_optical_flow_p_pub = orb_advertise(ORB_ID(optical_flow), &_optical_flow_p_sp); //  _press_topic;
 
@@ -1144,6 +1157,24 @@ AUVControl::task_main()
 
     		}
 		*/
+      /*  
+      orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+      if (_v_rates_sp.x > 0.5f) {
+        PX4_INFO("Emergency stop from joystick");
+        for (unsigned i = 0; i < 6; i++) {                          
+                      
+            int ret = px4_ioctl(fd, PWM_SERVO_SET(i), 1500);       
+
+            if (ret != OK) {
+              PX4_ERR("PWM_SERVO_SET(%d)", i);
+              return 1;
+            }                 
+        }
+        //lhnguyen debug: Exit from auv_att_control
+          _task_should_exit = true;
+          continue;
+      }
+      */
 		
 
     		/* this is undesirable but not much we can do - might want to flag unhappy status */
@@ -1318,6 +1349,7 @@ AUVControl::task_main()
     orb_unsubscribe(_sensor_combined_sub);
     orb_unsubscribe(_v_force_sp_sub);
     orb_unsubscribe(_position_sp_sub);
+    orb_unsubscribe(_actuator_control_lhnguyen_sub);
 
  	 _control_task = -1;
   	return 0;
