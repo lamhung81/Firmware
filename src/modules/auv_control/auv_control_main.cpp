@@ -126,6 +126,8 @@ public:
 	
 private:
 	//int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value;
+    bool    _isManualMode;
+    bool    _isEmmergencyStop;
   	bool  	_task_should_exit;    /**< if true, task_main() should exit */
   	int   	_control_task;      /**< task handle */
 
@@ -228,6 +230,8 @@ namespace auv_control
 
 
 AUVControl::AUVControl():
+  _isManualMode(true),
+  _isEmmergencyStop(false),
   _task_should_exit(false),
   _control_task(-1),
 
@@ -633,24 +637,24 @@ AUVControl::control_depth(float dt)
     orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
   
     //orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
-    orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
+    //orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
   
     //For referent angular velocites and thrust
-    orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+    //orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 
     
-    orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
-    orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
+    //orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
+    //orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
 
-    if (_printing_time%10 ==0) {
+    //if (_printing_time%10 ==0) {
 
         //                                           NED                   0.5                  0.6                      0.7
         //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
 
         //                                           ENU                   0.6                  0.5                     -0.7
-        PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
-        PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
-    }
+    //    PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+    //    PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+    //}
     
 
 
@@ -1148,6 +1152,9 @@ AUVControl::task_main()
         
       orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
       if (_v_rates_sp.roll > 0.5f) {
+        _isEmmergencyStop = true;
+      }
+      if (_isEmmergencyStop) {
         PX4_INFO("Emergency stop from joystick");
         for (unsigned i = 0; i < 6; i++) {                          
                       
@@ -1197,11 +1204,25 @@ AUVControl::task_main()
 
     		//lhnguyen debug: Comment for avoiding joystick change checking!!!
     		//if (poll_fds.revents & POLLIN) {
-    		if (true){
+    		//if (true){
+
+        //Check if it is Manual control mode?
+          PX4_INFO("Debug pitch %1.1f", (double)_v_rates_sp.pitch); 
+        if (abs(_v_rates_sp.pitch) > 0.5f) {
+          _isManualMode = true;
+        } else{
+          _isManualMode = false;
+        }
+
+        if (_isManualMode){
+            if (_printing_time%10 ==0) {    
+              PX4_INFO("In manual mode"); 
+            }
+
     	
         		static uint64_t last_run = 0;
-			float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
-			last_run = hrt_absolute_time();
+			      float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
+			      last_run = hrt_absolute_time();
 
 			//lhnguyen debug: 
 			//PX4_INFO("Debug AUV last_run = %lld", last_run);
