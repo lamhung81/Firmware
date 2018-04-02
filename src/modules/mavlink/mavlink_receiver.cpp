@@ -147,7 +147,6 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_rates_sp{},
 	_force_sp_lhnguyen{},
 	_position_sp_lhnguyen{},
-	_actuator_control_lhnguyen{},
 	//_manual_sp{},
 	_time_offset_avg_alpha(0.8),
 	_time_offset(0),
@@ -1109,21 +1108,7 @@ MavlinkReceiver::handle_message_set_actuator_control_target(mavlink_message_t *m
 	mavlink_set_actuator_control_target_t set_actuator_control_target;
 	mavlink_msg_set_actuator_control_target_decode(msg, &set_actuator_control_target);
 
-	//lhnguyen debug
-	//static uint8_t flag = 0;
-	//actuator_controls.timestamp = hrt_absolute_time();
-	_actuator_control_lhnguyen.control[0] = 1.0; //set_actuator_control_target.controls[0];
-
-	if (_actuator_controls_pub == nullptr) {
-		_actuator_controls_pub = orb_advertise(ORB_ID(actuator_controls_0), &_actuator_control_lhnguyen);
-
-	} else {
-		orb_publish(ORB_ID(actuator_controls), _actuator_controls_pub, &_actuator_control_lhnguyen);
-	}
-
-	
-
-	//end of lhnguyen debug		
+			
 
 	struct offboard_control_mode_s offboard_control_mode = {};
 

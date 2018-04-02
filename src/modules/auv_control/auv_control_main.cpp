@@ -86,8 +86,6 @@
 #include <uORB/topics/vehicle_force_setpoint.h>
 #include <uORB/topics/position_setpoint.h>
 
-//#include <uORB/topics/actuator_controls.h>
-
 
 
 #include <math.h>
@@ -140,8 +138,7 @@ private:
   	int     _sensor_combined_sub;
     int     _manual_control_sp_sub;
     int     _v_force_sp_sub;
-    int     _position_sp_sub;
-    int     _actuator_control_lhnguyen_sub;
+    int     _position_sp_sub;    
   	
 	float 	_vzr;
 	float   _zr;
@@ -177,7 +174,6 @@ private:
   	struct  manual_control_setpoint_s    _manual_control_sp;
   	struct  vehicle_force_setpoint_s     _v_force_sp;
     struct  position_setpoint_s          _position_sp;
-    struct  actuator_controls_s          _actuator_control_lhnguyen;
    
   	
   	struct 	actuator_armed_s       _armed;             /**< actuator arming status */
@@ -266,8 +262,7 @@ AUVControl::AUVControl():
   _manual_control_sp{},
   _v_force_sp{},
   _position_sp{},
-  _actuator_control_lhnguyen{},
-  
+   
   _armed{},
 
 
@@ -646,7 +641,6 @@ AUVControl::control_depth(float dt)
     
     orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
     orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
-    orb_copy(ORB_ID(actuator_controls), _actuator_control_lhnguyen_sub, &_actuator_control_lhnguyen);
 
     if (_printing_time%10 ==0) {
 
@@ -656,7 +650,6 @@ AUVControl::control_depth(float dt)
         //                                           ENU                   0.6                  0.5                     -0.7
         PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
         PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
-        PX4_INFO("Debug actuator: %1.6f ", (double)_actuator_control_lhnguyen.control[0]);
     }
     
 
@@ -809,8 +802,6 @@ AUVControl::control_att(float dt)
 
     orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
     orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
-    orb_copy(ORB_ID(actuator_controls), _actuator_control_lhnguyen_sub, &_actuator_control_lhnguyen);
-
     if (_printing_time%10 ==0) {
 
         //                                           NED                   0.5                  0.6                      0.7
@@ -819,7 +810,6 @@ AUVControl::control_att(float dt)
         //                                           ENU                   0.6                  0.5                     -0.7
         PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
         PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
-        PX4_INFO("Debug actuator: %1.6f ", (double)_actuator_control_lhnguyen.control[0]);
     }
 
 
@@ -1044,9 +1034,7 @@ AUVControl::task_main()
     _v_force_sp_sub = orb_subscribe(ORB_ID(vehicle_force_setpoint));
     _position_sp_sub = orb_subscribe(ORB_ID(position_setpoint));
 
-    _actuator_control_lhnguyen_sub = orb_subscribe(ORB_ID(actuator_controls));
-
-
+   
  	_optical_flow_p_pub = orb_advertise(ORB_ID(optical_flow), &_optical_flow_p_sp); //  _press_topic;
 
 
@@ -1349,7 +1337,6 @@ AUVControl::task_main()
     orb_unsubscribe(_sensor_combined_sub);
     orb_unsubscribe(_v_force_sp_sub);
     orb_unsubscribe(_position_sp_sub);
-    orb_unsubscribe(_actuator_control_lhnguyen_sub);
 
  	 _control_task = -1;
   	return 0;
