@@ -118,7 +118,8 @@ set(config_module_list
 	#modules/mc_att_control
 	#modules/mc_pos_control
 	#modules/vtol_att_control
-	modules/auv_att_control
+	#modules/auv_att_control    #lhnguyen add
+	modules/auv_control         #lhnguyen add
 
 	#
 	# Logging
