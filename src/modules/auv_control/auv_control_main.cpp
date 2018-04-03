@@ -561,6 +561,7 @@ AUVControl::depth_estimate(float dt)
 void
 AUVControl::control_depth(float dt)
 {           
+    bool print_in_control_depth = true;
 
     orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
     if ((  abs(_v_att_sp.q_d[2]) < 0.1f) && (_v_att_sp.q_d[1] > -0.5f) ) {
@@ -594,7 +595,7 @@ AUVControl::control_depth(float dt)
 	//Update reference depth value
 	_zr += _vzr*dt;  
 
-    if (_printing_time%10 ==0) {    
+    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {    
         PX4_INFO("Debug _zr _vzr: %1.6f  %1.6f ", (double)_zr , (double)_vzr );   
     }
 
@@ -613,7 +614,7 @@ AUVControl::control_depth(float dt)
 		_vzr = (float) 0.0;
 	}
 
-    if (_printing_time%10 ==0) {   
+    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {   
         PX4_INFO("Debug depth input: _zr  _vzr  dt: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
     }
     
@@ -667,7 +668,7 @@ AUVControl::control_depth(float dt)
     Vector<3> gamma = R_hat * e3;
 
     //lhnguyen debugging print
-    if (_printing_time%10 ==0) {
+    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {
         PX4_INFO("Debug depth gamma: %1.6f  %1.6f  %1.6f", (double)gamma(0), (double)gamma(1), (double)gamma(2));
     }
        
@@ -684,7 +685,7 @@ AUVControl::control_depth(float dt)
     float omega_3  = _v_att.yawspeed;
 
     //lhnguyen debugging print
-    if (_printing_time%10 ==0) {
+    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {
         PX4_INFO("Debug depth omega: %1.6f  %1.6f  %1.6f", (double)omega_1, (double)omega_2, (double)omega_3);
     }
 
@@ -698,7 +699,7 @@ AUVControl::control_depth(float dt)
     float v_depth_B = (float)_v_depth_estimated + temp_A*L_P1B  + temp_C*d_PP1; //AUV depth velocity measured at the centre of boyancy
 
     //lhnguyen debugging print
-    if (_printing_time%10 ==0) {
+    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {
         PX4_INFO("Debug depth depthB v_depth_B: %1.6f  %1.6f ", (double)depth_B, (double)v_depth_B);
     }
 
@@ -741,7 +742,7 @@ AUVControl::control_depth(float dt)
     _z_depth = satFunction(_z_depth, 5.0f); //For safety, not growing too much
 
 
-    if (_printing_time%10 ==0) {    
+    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {    
         PX4_INFO("Debug _z_depth  z_depth_dot: %1.6f  %1.6f ", (double)_z_depth , (double)z_depth_dot );   
     }
 
@@ -753,7 +754,7 @@ AUVControl::control_depth(float dt)
 
 
     //lhnguyen debugging print
-    if (_printing_time%10 ==0) {
+    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {
         PX4_INFO("Debug Fc_body: %1.6f  %1.6f  %1.6f", (double)Fc_body(0), (double)Fc_body(1), (double)Fc_body(2));
     }
  
@@ -842,16 +843,33 @@ AUVControl::control_att(float dt)
 	Vector<3> gamma = R_hat * e3;
 	
 	Vector<3> gamma_d (0.0f, 0.0f, 1.0f);  //Should be input from joystick
-	
-	//lhnguyen debug: Becareful about sign of components of gamma_d
-	//nghieng max 45 deg -> magnitude 0.707f 
-	gamma_d(0) =  0.707f*joystick_deadband(_v_rates_sp.pitch ,0.2);
-	gamma_d(1) =  0.707f*joystick_deadband(_v_rates_sp.roll,0.2);
-	gamma_d(2) = sqrt(1.0f - gamma_d(0)*gamma_d(0) - gamma_d(1)*gamma_d(1));
 
-	float omega_d = 0.0f;                  //Should be input from joystick
+	
+  //Old code using _v_rates_sp for transferring attitutde information
+  if (false){
+    //lhnguyen debug: Becareful about sign of components of gamma_d
+    //nghieng max 45 deg -> magnitude 0.707f 
+    gamma_d(0) =  0.707f*joystick_deadband(_v_rates_sp.pitch, 0.2);
+    gamma_d(1) =  0.707f*joystick_deadband(_v_rates_sp.roll, 0.2);
+    gamma_d(2) = sqrt(1.0f - gamma_d(0)*gamma_d(0) - gamma_d(1)*gamma_d(1));
+
+    //float omega_d = 0.0f;                  //Should be input from joystick
+    //max yaw_angular_velocity = pi/12
+    //omega_d    = 5.0f*0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
+  }
+	
+  //New code
+  gamma_d(0) =  0.707f*joystick_deadband(_v_force_sp.y ,0.2);
+  gamma_d(1) =  0.707f*joystick_deadband(_v_force_sp.x,0.2);
+  gamma_d(2) = sqrt(1.0f - gamma_d(0)*gamma_d(0) - gamma_d(1)*gamma_d(1));
+
+  float omega_d = 0.0f;                  //Should be input from joystick
   //max yaw_angular_velocity = pi/12
-	omega_d    = 5.0f*0.2617f*joystick_deadband(_v_rates_sp.yaw ,0.2);
+  omega_d    = 5.0f*0.2617f*joystick_deadband(_v_force_sp.z ,0.2);
+
+
+
+
 
 //  Get from joystick by hi-jacking vehicle_rates_setpoint to send it
 //
@@ -1151,9 +1169,17 @@ AUVControl::task_main()
 		*/
         
       orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+
+      if (_printing_time%10 ==0) {
+        PX4_INFO("Debug emmergency %1.1f", (double)_v_rates_sp.roll); 
+      }  
+
       if (_v_rates_sp.roll > 0.5f) {
         _isEmmergencyStop = true;
+      } else {
+        _isEmmergencyStop = false;
       }
+
       if (_isEmmergencyStop) {
         PX4_INFO("Emergency stop from joystick");
         for (unsigned i = 0; i < 6; i++) {                          
@@ -1204,8 +1230,9 @@ AUVControl::task_main()
 
     		//lhnguyen debug: Comment for avoiding joystick change checking!!!
     		//if (poll_fds.revents & POLLIN) {
-    		//if (true){
+    		if (true){
 
+        /*
         //Check if it is Manual control mode?
           PX4_INFO("Debug pitch %1.1f", (double)_v_rates_sp.pitch); 
         if (abs(_v_rates_sp.pitch) > 0.5f) {
@@ -1215,6 +1242,8 @@ AUVControl::task_main()
         }
 
         if (_isManualMode){
+        */
+
             if (_printing_time%10 ==0) {    
               PX4_INFO("In manual mode"); 
             }
@@ -1267,7 +1296,7 @@ AUVControl::task_main()
       			// Moment[2] =  (float)2.0*raw.yaw;   
 
 			     //Attitude control, calculate _Gamma_c_x, _Gamma_c_y, _Gamma_c_z
-			 // control_att(dt); 
+			     // control_att(dt); 
 
       			Force[0]  =  1.0f*_Fcx + 1.0f*_Fcx_manual;
       			Force[1]  =  1.0f*_Fcy; 
