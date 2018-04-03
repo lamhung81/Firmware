@@ -1255,18 +1255,18 @@ AUVControl::task_main()
 			      float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
 			      last_run = hrt_absolute_time();
 
-			//lhnguyen debug: 
-			//PX4_INFO("Debug AUV last_run = %lld", last_run);
-			//PX4_INFO("Debug AUV dt = %1.6f", (double)dt);
+			       //lhnguyen debug: 
+			       //PX4_INFO("Debug AUV last_run = %lld", last_run);
+			       //PX4_INFO("Debug AUV dt = %1.6f", (double)dt);
 
-			//lhnguyen debug: do not use this guard
-			// guard against too small (< 2ms) and too large (> 20ms) dt's 
-			//if (dt < 0.002f) {
-			//	dt = 0.002f;
+			       //lhnguyen debug: do not use this guard
+			       // guard against too small (< 2ms) and too large (> 20ms) dt's 
+			       //if (dt < 0.002f) {
+			       //	dt = 0.002f;
 
-			//} else if (dt > 0.02f) {
-			//	dt = 0.02f;
-			//}	
+			       //} else if (dt > 0.02f) {
+			       //	dt = 0.02f;
+			       //}	
 	
           /*
      			struct vehicle_rates_setpoint_s raw;
@@ -1307,7 +1307,19 @@ AUVControl::task_main()
       			Moment[1] =  1.0f*_Gamma_c_y;    
       			Moment[2] =  1.0f*_Gamma_c_z;                                                                              
       							
-    		}
+    		} else
+        {
+          if (_printing_time%10 ==0) {    
+              PX4_INFO("In Autonomous control mode"); 
+            }
+
+            Force[0]  =  0.0f;
+            Force[1]  =  0.0f;
+            Force[2]  =  0.0f;
+            Moment[0] =  0.0f;
+            Moment[1] =  0.0f;   
+            Moment[2] =  0.0f;
+        }
 
     		//Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
     		ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
