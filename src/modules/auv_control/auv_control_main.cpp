@@ -211,6 +211,8 @@ private:
 
   	void    control_att(float dt);
 
+    void    inner_loop_control(float dt);
+
   	static 	void task_main_trampoline(int argc, char *argv[]);
   	int    	task_main();     
 
@@ -813,8 +815,8 @@ AUVControl::control_att(float dt)
         PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
 
         //                                           ENU                   0.6                  0.5                     -0.7
-        PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
-        PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+        //PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+        //PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
     }
 
 
@@ -980,7 +982,8 @@ AUVControl::control_att(float dt)
   _z_omega = sat3Function(_z_omega, 20.0f);
 
   if (_printing_time%10 ==0) {
-    PX4_INFO("_z_omega: %1.6f %1.6f %1.6f %2d ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) , sizeof(int));
+    //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f %2d ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) , sizeof(int));
+    PX4_INFO("_z_omega: %1.6f %1.6f %1.6f ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) );
   }
   
 
@@ -1030,6 +1033,188 @@ AUVControl::control_att(float dt)
 }
 
 
+
+
+
+void AUVControl::inner_loop_control(float dt)
+{
+  orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
+  
+  //orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub, &_sensor_gyro);
+  orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub, &_sensor_combined);
+  
+  //For referent angular velocites and thrust
+  orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
+
+  //orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
+  orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
+    
+
+
+  Quaternion Q_temp = _v_att.q;
+  Matrix<3, 3> R_hat    = Q_temp.to_dcm();
+
+
+  Vector <3> Euler_angle_in_rad = Q_temp.to_euler(); 
+       /*
+        PX4_INFO("Debug Euler: %1.6f  %1.6f  %1.6f ", (double)57.3*(double)Euler_angle_in_rad(0), 
+                            (double)57.3*(double)Euler_angle_in_rad(1),
+                                                                      (double)57.3*(double)Euler_angle_in_rad(2));    
+  */
+
+
+  R_hat = R_hat.transposed();
+
+  /*
+  Vector<3> gamma = (R_hat.data[0][2],
+         R_hat.data[1][2],
+         R_hat.data[2][2]);
+  */
+
+  Vector<3> e3(0.0f, 0.0f, 1.0f);
+  Vector<3> gamma = R_hat * e3;
+
+  /*
+  
+  Vector<3> gamma_d (0.0f, 0.0f, 1.0f);  //Should be input from joystick
+
+  
+   
+  //New code
+  gamma_d(0) =  0.707f*joystick_deadband(_v_force_sp.y ,0.2);
+  gamma_d(1) =  0.707f*joystick_deadband(_v_force_sp.x,0.2);
+  gamma_d(2) = sqrt(1.0f - gamma_d(0)*gamma_d(0) - gamma_d(1)*gamma_d(1));
+
+  float omega_d = 0.0f;                  //Should be input from joystick
+  //max yaw_angular_velocity = pi/12
+  omega_d    = 5.0f*0.2617f*joystick_deadband(_v_force_sp.z ,0.2);
+
+  
+  _Fcx_manual = 5.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
+  if (_printing_time%10 ==0) {    
+    PX4_INFO("Debug throttle: %1.6f ", (double)_Fcx_manual );
+  }
+
+
+  //Gain
+  float k1 = 0.3f; //0.8f; //0.5f; //0.1f;
+ 
+
+  Vector<3> Omega_d;
+  //In order: Vector and then scalar value, for multiplication 
+  Omega_d = (gamma_d % gamma) * k1 + gamma_d *  omega_d;
+  
+  Vector<3> Omega_d_dot(0.0f, 0.0f, 0.0f); //Approximation
+  */
+
+  float omega_3r = 0.0f;
+  float dot_omega_3r = 0.0f;
+
+  //PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+  //PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+  
+  //Receive from _position_sp 
+  omega_3r =     _position_sp.y;   //lhnguyen note: inverse order
+  dot_omega_3r = _position_sp.x;
+
+
+  Vector<3> Omega_d(0.0f, 0.0f, 0.0f);;
+  float k1 = 0.3f;
+  Omega_d = (e3 % gamma)* k1 + e3*omega_3r;
+
+  //Vector<3> Omega(0.0f, 0.0f, 0.0f);   //Should read from sensor??
+  //Vector<3> Omega(_sensor_gyro.x, _sensor_gyro.y, _sensor_gyro.z);                                          //from sensor_gyro directly
+  //Vector<3> Omega(_sensor_combined.gyro_rad[0], _sensor_combined.gyro_rad[1], _sensor_combined.gyro_rad[2]);  //From sensor_combined with average value
+  
+  // Use the filtered one from vehicle_attitude message!!!
+  Vector<3> Omega(_v_att.rollspeed, _v_att.pitchspeed, _v_att.yawspeed); 
+
+  Vector<3> Omega_d_dot(0.0f, 0.0f, 0.0f); 
+  Omega_d_dot = - (e3 % (Omega % gamma))*k1 + e3 * dot_omega_3r;
+
+
+  //PX4_INFO("Debug Omega_d: %1.6f  %1.6f  %1.6f", (double)Omega_d(0), (double)Omega_d(1), (double)Omega_d(2));
+
+  //Inerial matrix
+  Matrix<3, 3> J;
+  J.zero();
+  
+  //For New-BlueROV1, total innertial
+  J(0, 0) = 0.3105f;  J(0, 1) = 0.0000f;   J(0, 2) = 0.0000f;
+  J(1, 0) = 0.0000f;  J(1, 1) = 0.8486f;   J(1, 2) = 0.0000f;
+  J(2, 0) = 0.0000f;  J(2, 1) = 0.0000f;   J(2, 2) = 0.7176f;
+
+
+  Matrix<3, 3> J_inverted;
+  J_inverted.zero();
+  
+  //For New-BlueROV1, total innertial
+  J_inverted(0, 0) = 3.2206f;  J_inverted(0, 1) = 0.0000f;   J_inverted(0, 2) = 0.0000f;
+  J_inverted(1, 0) = 0.0000f;  J_inverted(1, 1) = 1.1784f;   J_inverted(1, 2) = 0.0000f;
+  J_inverted(2, 0) = 0.0000f;  J_inverted(2, 1) = 0.0000f;   J_inverted(2, 2) = 1.3935f;
+
+
+
+  
+
+  Vector<3> Omega_tilde = Omega - Omega_d; 
+
+
+  //Anti wind-up integrator
+  Vector<3> z_omega_dot = (- _z_omega  + sat3Function (_z_omega + Omega_tilde, 0.8f) ) *2.0f ;
+
+  _z_omega     += z_omega_dot*dt;   
+  //Need to verify if it is two big that leads to over memory capability
+  _z_omega = sat3Function(_z_omega, 20.0f);
+
+  if (_printing_time%10 ==0) {
+    //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f %2d ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) , sizeof(int));
+    PX4_INFO("_z_omega: %1.6f %1.6f %1.6f ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) );
+  }
+     
+  Vector<3>  G_feedforward;  
+  G_feedforward = (J*Omega) % Omega_d - J*Omega_d_dot; 
+
+  Matrix<3, 3> K_Omega; 
+  K_Omega(0, 0) = 3.0f*0.3105f;  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
+  K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 3.0f*0.8486f;   K_Omega(1, 2) = 0.0000f;
+  K_Omega(2, 0) = 0.0000f;       K_Omega(2, 1) = 0.0000f;        K_Omega(2, 2) = 3.0f*0.7176f;
+
+  float Ki_Omega = 6.0;
+
+  float eta3 = 8.0;
+  
+  Vector<3> Gg;  
+  Gg = (e3 % gamma) * 14.2*9.81*0.1;  //m*g*l e3 x RT e3
+
+  float a0 = 0.5;
+  float k0 = 20.0;  
+    
+  Vector<3> G_control(_Gamma_c_x, _Gamma_c_y, _Gamma_c_z);
+
+  Vector<3> temp(0.0f, 0.0f, 0.0f);  
+  temp = (J*Omega) % _Omega_hat + G_control + Gg + _Delta_G_hat;
+
+
+  Vector<3> Omega_hat_dot(0.0f, 0.0f, 0.0f);
+  Omega_hat_dot = J_inverted*temp + (Omega - _Omega_hat)* k0;
+  
+  _Omega_hat += Omega_hat_dot*dt; //Approximation  
+  _Omega_hat = sat3Function(_Omega_hat, 0.8);  //To prevent increasing too big!!!
+
+  Vector<3> Delta_G_hat_dot;
+  Delta_G_hat_dot = J*(Omega - _Omega_hat)* a0*a0*k0*k0;
+  
+  _Delta_G_hat += Delta_G_hat_dot*dt; //Approximation
+  _Delta_G_hat = sat3Function(_Delta_G_hat, 0.8);  //To prevent increasing too big!!!
+
+  Vector<3> Gamma_C;
+  Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - _z_omega*Ki_Omega - G_feedforward - _Delta_G_hat*0.0f; //Multiplication to 0.0f in case without current, for debugging
+  
+  _Gamma_c_x = Gamma_C(0);
+  _Gamma_c_y = Gamma_C(1);
+  _Gamma_c_z = Gamma_C(2);
+}
 
 
 void
@@ -1112,8 +1297,12 @@ AUVControl::task_main()
         	//orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
 
         	
-        	
+        	/*
+          static uint64_t last_run = 0;
+            float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
+            last_run = hrt_absolute_time();
 
+          */  
         	/*
         	//lhnguyen debug: Quaternion defined from joystick
         	_optical_flow_p_sp.pixel_flow_x_integral  =           _v_att_sp.q_d[0];          
@@ -1189,7 +1378,7 @@ AUVControl::task_main()
             if (ret != OK) {
               PX4_ERR("PWM_SERVO_SET(%d)", i);
               return 1;
-            }                 
+            }               
         }
         //lhnguyen debug: Exit from auv_att_control
           _task_should_exit = true;
@@ -1307,18 +1496,37 @@ AUVControl::task_main()
       			Moment[1] =  1.0f*_Gamma_c_y;    
       			Moment[2] =  1.0f*_Gamma_c_z;                                                                              
       							
-    		} else
+    		} 
+        else
         {
           if (_printing_time%10 ==0) {    
               PX4_INFO("In Autonomous control mode"); 
             }
+            orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
+            orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
+            if (_printing_time%10 ==0) {
 
-            Force[0]  =  0.0f;
-            Force[1]  =  0.0f;
-            Force[2]  =  0.0f;
-            Moment[0] =  0.0f;
-            Moment[1] =  0.0f;   
-            Moment[2] =  0.0f;
+              //                                           NED                   0.5                  0.6                      0.7
+              PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+
+              //                                           ENU                   0.6                  0.5                     -0.7
+              PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+              //PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
+            }
+
+            static uint64_t last_run = 0;
+            float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
+            last_run = hrt_absolute_time();
+
+            inner_loop_control(dt);
+
+
+            Force[0]  =  _v_force_sp.x;
+            Force[1]  =  _v_force_sp.y;
+            Force[2]  =  _v_force_sp.z;
+            Moment[0] =  _Gamma_c_x;
+            Moment[1] =  _Gamma_c_y;   
+            Moment[2] =  _Gamma_c_z;
         }
 
     		//Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
