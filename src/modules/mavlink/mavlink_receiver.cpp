@@ -888,7 +888,9 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 		_position_sp_lhnguyen.z = set_position_target_local_ned.z;
 		flag2 |= 0x7;
 	}
-	/*
+	
+	//lhnguyen debug: Need to comment this paragraph if need to send vx, vy, vz
+	//Do not know why if send x y z and vx vy vz, does not work!!
 	if (_position_sp_pub == nullptr){
 		_position_sp_pub = orb_advertise(ORB_ID(position_setpoint), &_position_sp_lhnguyen);
 	}
@@ -898,8 +900,9 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 			flag2 = 0;
 		}
 	}
-	*/
+	
 
+	/*
 	//static uint8_t flag3 = 0;
 	bool tignore_velocity = (bool)(set_position_target_local_ned.type_mask & 0x38);
 	if (!tignore_velocity){
@@ -918,6 +921,8 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 			flag2 = 0;
 		}
 	}
+
+	*/
 
 	struct offboard_control_mode_s offboard_control_mode = {};
 
