@@ -810,7 +810,7 @@ AUVControl::control_att(float dt)
     if (_printing_time%10 ==0) {
 
         //                                           NED                   0.5                  0.6                      0.7
-        //PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+        PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
 
         //                                           ENU                   0.6                  0.5                     -0.7
         PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
@@ -1298,7 +1298,7 @@ AUVControl::task_main()
       			// Moment[2] =  (float)2.0*raw.yaw;   
 
 			     //Attitude control, calculate _Gamma_c_x, _Gamma_c_y, _Gamma_c_z
-			     // control_att(dt); 
+			      control_att(dt); 
 
       			Force[0]  =  1.0f*_Fcx + 1.0f*_Fcx_manual;
       			Force[1]  =  1.0f*_Fcy; 
