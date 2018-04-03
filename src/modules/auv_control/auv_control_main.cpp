@@ -561,7 +561,7 @@ AUVControl::depth_estimate(float dt)
 void
 AUVControl::control_depth(float dt)
 {           
-    bool print_in_control_depth = true;
+    bool print_in_control_depth = false;
 
     orb_copy(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, &_v_att_sp);
     if ((  abs(_v_att_sp.q_d[2]) < 0.1f) && (_v_att_sp.q_d[1] > -0.5f) ) {
