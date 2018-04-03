@@ -1230,11 +1230,13 @@ AUVControl::task_main()
 
     		//lhnguyen debug: Comment for avoiding joystick change checking!!!
     		//if (poll_fds.revents & POLLIN) {
-    		if (true){
+    		//if (true){
 
-        /*
+        
         //Check if it is Manual control mode?
+        if (_printing_time%10 ==0) {
           PX4_INFO("Debug pitch %1.1f", (double)_v_rates_sp.pitch); 
+        }
         if (abs(_v_rates_sp.pitch) > 0.5f) {
           _isManualMode = true;
         } else{
@@ -1242,7 +1244,7 @@ AUVControl::task_main()
         }
 
         if (_isManualMode){
-        */
+        
 
             if (_printing_time%10 ==0) {    
               PX4_INFO("In manual mode"); 
