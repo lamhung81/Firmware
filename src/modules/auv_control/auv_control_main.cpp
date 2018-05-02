@@ -812,7 +812,7 @@ AUVControl::control_att(float dt)
     if (_printing_time%10 ==0) {
 
         //                                           NED                   0.5                  0.6                      0.7
-        PX4_INFO("Debug force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+        PX4_INFO("Debug att force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
 
         //                                           ENU                   0.6                  0.5                     -0.7
         //PX4_INFO("Debug posit_setpoint: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
