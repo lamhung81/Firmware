@@ -1181,7 +1181,9 @@ then
 	#lhnguyen debug
 	if ver hwcmp PX4FMU_V2
 	then
-		pwm failsafe -c 12345678 -p 1500
+		#pwm failsafe -c 12345678 -p 1500
+		pwm failsafe -c 123456 -p 1500
+		pwm failsafe -c 78 -p 1100
 	fi
 
 
