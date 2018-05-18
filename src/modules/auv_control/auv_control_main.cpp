@@ -627,25 +627,18 @@ AUVControl::depth_estimate(float dt)
 
 void AUVControl::control_lamp(float dt)
 {
-  orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
   orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 
-           float lamp_intensity_increase = - _position_sp.z;
-           float lamp_intensity_decrease = _v_rates_sp.yaw;
+  bool print_in_control_lamp = true;
+
+  if ((_printing_time%10 ==0)&&(print_in_control_lamp)) {    
+        //PX4_INFO("Debug control _________________ lamp: %1.6f ", (double)_v_rates_sp.yaw );  
+        PX4_INFO("Debug lamp intensity pwm: %1.6d ", _lamp_intensity_pwm); 
+    }
+    //PX4_INFO("Debug control _________________ lamp: %1.6f ", (double)_v_rates_sp.yaw );
            float lamp_intensity_rate = 0.0f;
-           if (lamp_intensity_increase > 0.5f){
-              lamp_intensity_rate = 1.0f;
 
-           }else{
-              if (lamp_intensity_decrease < - 0.5f){
-                lamp_intensity_rate = -1.0f;
-
-              }else{
-                lamp_intensity_rate = 0.0f;
-              }
-           }
-
-           lamp_intensity_rate = 50.0f*lamp_intensity_rate; //He so can dieu chinh
+           lamp_intensity_rate = -40.0f*_v_rates_sp.yaw;  //50.0f is a proportional coefficient
 
            _lamp_intensity_pwm += round(lamp_intensity_rate*dt);
 
@@ -658,7 +651,7 @@ void AUVControl::control_lamp(float dt)
             _lamp_intensity_pwm = 1900;
             lamp_intensity_rate = 0.0f;
            }
-
+           //PX4_INFO("Debug control _________________ lamp 2: %1.6f ", (double)_lamp_intensity_pwm);
           
 
 }
@@ -1102,7 +1095,7 @@ AUVControl::control_att(float dt)
 
   if (_printing_time%10 ==0) {
     //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f %2d ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) , sizeof(int));
-    PX4_INFO("_z_omega: %1.6f %1.6f %1.6f ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) );
+    //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) );
   }
   
 
@@ -1513,11 +1506,11 @@ AUVControl::task_main()
         }
 
         //Lamp control
-        //int ret = px4_ioctl(fd, PWM_SERVO_SET(6), 1100);
-        //if (ret != OK) {
-        //      PX4_ERR("PWM_SERVO_SET(%d)", 6);
-        //      return 1;
-        //    }
+        int ret = px4_ioctl(fd, PWM_SERVO_SET(6), 1100);
+        if (ret != OK) {
+              PX4_ERR("PWM_SERVO_SET(%d)", 6);
+              return 1;
+            }
 
 
         //lhnguyen debug: Exit from auv_att_control
@@ -1561,8 +1554,14 @@ AUVControl::task_main()
     		//if (poll_fds.revents & POLLIN) {
     		//if (true){
 
+
+        static uint64_t last_run = 0;
+            float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
+            last_run = hrt_absolute_time();
+
+
         //Lamp control
-        if (false){
+        if (true){
           control_lamp(dt);
 
         }
@@ -1587,10 +1586,12 @@ AUVControl::task_main()
               PX4_INFO("In manual mode"); 
             }
 
-    	
+    	       /*
         		static uint64_t last_run = 0;
 			      float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
 			      last_run = hrt_absolute_time();
+
+            */
 
             if (false) {
               _Fcx_auto = he_so_giam*_Fcx_auto;
@@ -1690,16 +1691,18 @@ AUVControl::task_main()
             if (_printing_time%10 ==0) {
 
               //                                           NED                   0.5                  0.6                      0.7
-              PX4_INFO("Debug force_setpoint force: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
+              //PX4_INFO("Debug force_setpoint force: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
 
               //                                           ENU                   0.6                  0.5                     -0.7
-              PX4_INFO("Debug posit_setpoint omega: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
+              //PX4_INFO("Debug posit_setpoint omega: %1.6f  %1.6f  %1.6f", (double)_position_sp.x , (double)_position_sp.y , (double)_position_sp.z );
               //PX4_INFO("Debug posit_setpoint_velo: %1.6f  %1.6f  %1.6f", (double)_position_sp.vx , (double)_position_sp.vy , (double)_position_sp.vz );
             }
 
+            /*
             static uint64_t last_run = 0;
             float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
             last_run = hrt_absolute_time();
+            */
 
             inner_loop_control(dt);
 
@@ -1804,11 +1807,11 @@ AUVControl::task_main()
     		}
 
         //Lamp control
-        //int ret = px4_ioctl(fd, PWM_SERVO_SET(6), _lamp_intensity_pwm);
-        //if (ret != OK) {
-        //      PX4_ERR("PWM_SERVO_SET(%d)", 6);
-        //      return 1;
-        //    }
+        int ret = px4_ioctl(fd, PWM_SERVO_SET(6), _lamp_intensity_pwm);
+        if (ret != OK) {
+              PX4_ERR("PWM_SERVO_SET(%d)", 6);
+              return 1;
+            }
 
 
         _printing_time ++;
