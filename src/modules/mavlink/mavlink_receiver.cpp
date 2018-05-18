@@ -1461,6 +1461,7 @@ MavlinkReceiver::handle_message_set_attitude_target(mavlink_message_t *msg)
 
 	//Begin of lhnguyen debug
 
+	
 	static uint8_t flag = 0; //lhnguyen: use static for setting global variable -like!!!
 
         //debug lhnguyen, (double) for converting float to double
@@ -1494,18 +1495,23 @@ MavlinkReceiver::handle_message_set_attitude_target(mavlink_message_t *msg)
 
 		if (flag == 0xf) { 
 			// lhnguyen: uncomment for printing values
-			/*
-			PX4_INFO("Debug mavlink1: % 1.6f % 1.6f % 1.6f % 1.6f  ", 
-				(double)_rates_sp.roll, 
-				(double)_rates_sp.pitch, 
-				(double)_rates_sp.yaw, 
-				(double)_rates_sp.thrust );
-			*/
+			
+			//PX4_INFO("Debug mavlink1: % 1.6f % 1.6f % 1.6f % 1.6f  ", 
+			//	(double)_rates_sp.roll, 
+			//	(double)_rates_sp.pitch, 
+			//	(double)_rates_sp.yaw, 
+			//	(double)_rates_sp.thrust );
+			
 
 			orb_publish(ORB_ID(vehicle_rates_setpoint), _rates_sp_pub, &_rates_sp);
 			flag = 0;
 		}
 	}
+	
+
+
+	
+
 	
 	static uint8_t flag2 = 0x00; 
 	bool tignore_quaternion = (bool)(set_attitude_target.type_mask & (1 << 7));
