@@ -193,7 +193,11 @@ private:
   float   _Gcy_auto;
   float   _Gcz_auto;
 
+  float _pressure_zero_level;
+
   int _lamp_intensity_pwm;
+  int _changeStateManual2Auto;
+
 
 
 	float 	_depth_estimated;
@@ -316,7 +320,9 @@ AUVControl::AUVControl():
   _Gcx_auto(0.0f),
   _Gcy_auto(0.0f),
   _Gcz_auto(0.0f),
+  _pressure_zero_level(1010.0f),
   _lamp_intensity_pwm(1100),
+  _changeStateManual2Auto(0),
 
   _depth_estimated(0.0),
   _v_depth_estimated(0.0),
@@ -587,7 +593,19 @@ AUVControl::depth_estimate(float dt)
         
     //double u = 0.0; //depth velocity
     //float pressure_zero_level = 1030; 
-    float pressure_zero_level = 1010.0; //997.0; //1027.0; //980;
+    //float pressure_zero_level = 1010.0; //997.0; //1027.0; //980;
+
+    orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
+    float pressure_zero_level_rate =    -0.5f* _position_sp.z;
+
+    _pressure_zero_level += pressure_zero_level_rate*dt;
+    float pressure_zero_level = _pressure_zero_level;
+
+    if ((_printing_time%10 ==0)) {    
+        //PX4_INFO("Debug control _________________ lamp: %1.6f ", (double)_v_rates_sp.yaw );  
+        PX4_INFO("Debug pressure_zero_level: %6.1f ", (double)pressure_zero_level); 
+    }
+
 
 	//depth and depth velocity observator
     // x = (_pressure - pressure_zero_level)*(float)100.0/(float)1000.0/(float)9.81; //*100 to convert to pascal; 10000 kg/m3 for fresh water; 
@@ -633,12 +651,12 @@ void AUVControl::control_lamp(float dt)
 
   if ((_printing_time%10 ==0)&&(print_in_control_lamp)) {    
         //PX4_INFO("Debug control _________________ lamp: %1.6f ", (double)_v_rates_sp.yaw );  
-        PX4_INFO("Debug lamp intensity pwm: %1.6d ", _lamp_intensity_pwm); 
+        //PX4_INFO("Debug lamp intensity pwm: %1.6d ", _lamp_intensity_pwm); 
     }
     //PX4_INFO("Debug control _________________ lamp: %1.6f ", (double)_v_rates_sp.yaw );
            float lamp_intensity_rate = 0.0f;
 
-           lamp_intensity_rate = -40.0f*_v_rates_sp.yaw;  //50.0f is a proportional coefficient
+           lamp_intensity_rate = -60.0f*_v_rates_sp.yaw;  //50.0f is a proportional coefficient
 
            _lamp_intensity_pwm += round(lamp_intensity_rate*dt);
 
@@ -779,6 +797,7 @@ AUVControl::control_depth(float dt)
     //Need to convert the depth and depth_velocity measured at P (end of the tube) to the value of B with taking into account AUV rotation kinematics
     //
 
+    //lhnguyen debug_Omega???
     float omega_1  = _v_att.rollspeed;
     float omega_2  = _v_att.pitchspeed; 
     float omega_3  = _v_att.yawspeed;
@@ -977,7 +996,7 @@ AUVControl::control_att(float dt)
 
   float omega_d = 0.0f;                  //Should be input from joystick
   //max yaw_angular_velocity = pi/12
-  omega_d    = -5.0f*0.2617f*joystick_deadband(trung_gian_3 ,0.2f);  
+  omega_d    = -4.0f*0.2617f*joystick_deadband(trung_gian_3 ,0.2f);  
 
 
 
@@ -1063,8 +1082,8 @@ AUVControl::control_att(float dt)
 	//Vector<3> Omega(_sensor_gyro.x, _sensor_gyro.y, _sensor_gyro.z);                                          //from sensor_gyro directly
 	//Vector<3> Omega(_sensor_combined.gyro_rad[0], _sensor_combined.gyro_rad[1], _sensor_combined.gyro_rad[2]);  //From sensor_combined with average value
 	
-  // Use the filtered one from vehicle_attitude message!!!
-  Vector<3> Omega(_v_att.rollspeed, _v_att.pitchspeed, _v_att.yawspeed); 
+  // Use the filtered one from vehicle_attitude messag_Omegae!!!
+  Vector<3> Omega(_v_att.rollspeed, _v_att.pitchspeed, _v_att.yawspeed); //lhnguyen debug_Omega ???
 
 	Vector<3> Omega_tilde = Omega - Omega_d; 
 
@@ -1142,7 +1161,7 @@ AUVControl::control_att(float dt)
 	
 	//_Gamma_c_x = Gamma_C(0);
 	//_Gamma_c_y = Gamma_C(1);
- 	//_Gamma_c_z = Gamma_C(2);
+ 	//_Gamma_c_z = Gamma_C(2);gamma
 
   _Gamma_c_x_att = Gamma_C(0);
   _Gamma_c_y_att = Gamma_C(1);
@@ -1245,7 +1264,9 @@ void AUVControl::inner_loop_control(float dt)
   //Vector<3> Omega(_sensor_combined.gyro_rad[0], _sensor_combined.gyro_rad[1], _sensor_combined.gyro_rad[2]);  //From sensor_combined with average value
   
   // Use the filtered one from vehicle_attitude message!!!
-  Vector<3> Omega(_v_att.rollspeed, _v_att.pitchspeed, _v_att.yawspeed); 
+  Vector<3> Omega(_v_att.rollspeed, _v_att.pitchspeed, _v_att.yawspeed); //lhnguyen debug_Omega??
+Omega
+
 
   Vector<3> Omega_d_dot(0.0f, 0.0f, 0.0f); 
   Omega_d_dot = - (e3 % (Omega % gamma))*k1 + e3 * dot_omega_3r;
@@ -1287,16 +1308,16 @@ void AUVControl::inner_loop_control(float dt)
 
   if (_printing_time%10 ==0) {
     //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f %2d ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) , sizeof(int));
-    PX4_INFO("_z_omega: %1.6f %1.6f %1.6f ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) );
+    //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) );
   }
      
   Vector<3>  G_feedforward;  
   G_feedforward = (J*Omega) % Omega_d - J*Omega_d_dot; 
 
   Matrix<3, 3> K_Omega; 
-  K_Omega(0, 0) = 3.0f*0.3105f;  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
-  K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 3.0f*0.8486f;   K_Omega(1, 2) = 0.0000f;
-  K_Omega(2, 0) = 0.0000f;       K_Omega(2, 1) = 0.0000f;        K_Omega(2, 2) = 3.0f*0.7176f;
+  K_Omega(0, 0) = 1.0f*3.0f*0.3105f;  K_Omega(0, 1) = 0.0000f;             K_Omega(0, 2) = 0.0000f;
+  K_Omega(1, 0) = 0.0000f;            K_Omega(1, 1) = 1.0f*3.0f*0.8486f;   K_Omega(1, 2) = 0.0000f;
+  K_Omega(2, 0) = 0.0000f;            K_Omega(2, 1) = 0.0000f;             K_Omega(2, 2) = 3.0f*0.7176f;
 
   float Ki_Omega = 6.0;
 
@@ -1334,9 +1355,14 @@ void AUVControl::inner_loop_control(float dt)
   //_Gamma_c_y = Gamma_C(1);
   //_Gamma_c_z = Gamma_C(2);
 
-  _Gamma_c_x_inner = Gamma_C(0);
-  _Gamma_c_y_inner = Gamma_C(1);
+  _Gamma_c_x_inner = 1.0f*Gamma_C(0);
+  _Gamma_c_y_inner = 1.0f*Gamma_C(1);
   _Gamma_c_z_inner = Gamma_C(2);
+
+   if (_printing_time%10 ==0) {
+    PX4_INFO("omge3r   omega 3r dot: %1.6f %1.6f ", (double)omega_3r, (double)dot_omega_3r);
+    PX4_INFO("Gamma C: %1.6f %1.6f %1.6f ", (double)_Gamma_c_x_inner, (double) _Gamma_c_y_inner, (double) Gamma_C(2) );
+  }
 
 }
 
@@ -1569,7 +1595,7 @@ AUVControl::task_main()
 
         //Check if it is Manual control mode?
         if (_printing_time%10 ==0) {
-          PX4_INFO("Debug pitch %1.1f", (double)_v_rates_sp.pitch); 
+          //PX4_INFO("Debug pitch %1.1f", (double)_v_rates_sp.pitch); 
         }
         if (abs(_v_rates_sp.pitch) > 0.5f) {
           _isManualMode = true;
@@ -1666,13 +1692,16 @@ AUVControl::task_main()
             _Gcy_man =  1.0f*_Gamma_c_y_depth + 1.0f*_Gamma_c_y_att;       
             _Gcz_man =  1.0f*_Gamma_c_z_depth + 1.0f*_Gamma_c_z_att;   
             */                                                          
-      							
+      			
+            _changeStateManual2Auto = 0;		
     		} 
         else
         {
           if (_printing_time%10 ==0) {    
               PX4_INFO("In Autonomous control mode"); 
             }
+
+
 
             if (false) {
               _Fcx_man = he_so_giam*_Fcx_man;
@@ -1706,7 +1735,7 @@ AUVControl::task_main()
 
             inner_loop_control(dt);
 
-            
+            /*
             Force[0]  =  _v_force_sp.x;
             Force[1]  =  _v_force_sp.y;
             Force[2]  =  _v_force_sp.z;
@@ -1716,7 +1745,27 @@ AUVControl::task_main()
             Moment[0] =  _Gamma_c_x_inner;
             Moment[1] =  _Gamma_c_y_inner;   
             Moment[2] =  _Gamma_c_z_inner;
+            */
             
+            //Lam giam gia tri luc va moment dieu khien khi chuyen trang thai tu manual2Auto
+            if (_changeStateManual2Auto < 250){
+              float he_so_ty_le = float(_changeStateManual2Auto)/float(250.0);
+              Force[0]  =  he_so_ty_le*_v_force_sp.x;
+              Force[1]  =  he_so_ty_le*_v_force_sp.y;
+              Force[2]  =  he_so_ty_le*_v_force_sp.z;           
+              Moment[0] =  he_so_ty_le*_Gamma_c_x_inner;
+              Moment[1] =  he_so_ty_le*_Gamma_c_y_inner;   
+              Moment[2] =  he_so_ty_le*_Gamma_c_z_inner;
+            } else{
+              _changeStateManual2Auto = 251;
+              Force[0]  =  _v_force_sp.x;
+              Force[1]  =  _v_force_sp.y;
+              Force[2]  =  _v_force_sp.z;           
+              Moment[0] =  _Gamma_c_x_inner;
+              Moment[1] =  _Gamma_c_y_inner;   
+              Moment[2] =  _Gamma_c_z_inner;
+            }
+
 
             /*
             _Fcx_auto  =  _v_force_sp.x;
@@ -1728,11 +1777,14 @@ AUVControl::task_main()
             _Gcy_auto =  _Gamma_c_y_inner;   
             _Gcz_auto =  _Gamma_c_z_inner;
             */
+
+            _changeStateManual2Auto += 1;
         }
 
         /*
         Force[0]  = _Fcx_man + _Fcx_auto;
         Force[1]  = _Fcy_man + _Fcy_auto;
+
         Force[2]  = _Fcz_man + _Fcz_auto;
         Moment[0] = _Gcx_man + _Gcx_auto;
         Moment[1] = _Gcy_man + _Gcy_auto;
@@ -1786,7 +1838,7 @@ AUVControl::task_main()
         throttle[4] =      0.0*throttle[4]; //Throttle 5
         */
           		
-
+        //6 thrusters control
     		for (unsigned i = 0; i < 6; i++) {  
                         
       			//convert from  N to kgf
