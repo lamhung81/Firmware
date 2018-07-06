@@ -126,6 +126,8 @@ public:
 	
 private:
 	//int roll_pwm_value , pitch_pwm_value, yaw_pwm_value, thrust_pwm_value;
+    bool    _isStartedIntegratorInManualControl;
+    bool    _isStartedIntegratorInInnerLoop;
     bool    _isManualMode;
     bool    _isEmmergencyStop;
   	bool  	_task_should_exit;    /**< if true, task_main() should exit */
@@ -275,6 +277,8 @@ namespace auv_control
 
 
 AUVControl::AUVControl():
+  _isStartedIntegratorInManualControl(false),
+  _isStartedIntegratorInInnerLoop(false),
   _isManualMode(true),
   _isEmmergencyStop(false),
   _task_should_exit(false),
@@ -423,8 +427,13 @@ void AUVControl::ForceMoment2Throttle(double Force[3], double Moment[3], double 
         double W1 = 0.1108; 
         double W3 = 0.1108; 
 
-
-
+        //lhnguyen debug: limit Force and Moment 
+       /*for (int i=0; i < 3; ++i){
+          if (Force[i] > 20.0) Force[i] = 20.0;
+          if (Force[i] < -20.0) Force[i] = -0.0;
+          if (Moment[i] > 7.0) Moment[i] = 7.0;
+          if (Moment[i] < -7.0) Moment[i] = -7.0;
+        }*/
 
 
 
@@ -446,6 +455,24 @@ void AUVControl::ForceMoment2Throttle(double Force[3], double Moment[3], double 
 
         //With contraints on throttles
         //to be continue
+
+        if (throttle_0 < -35.0) throttle_0 = -35.0;
+        if (throttle_0 >  35.0) throttle_0 =  35.0;
+
+        if (throttle_1 < -35.0) throttle_1 = -35.0;
+        if (throttle_1 >  35.0) throttle_1 =  35.0;
+
+        if (throttle_2 < -35.0) throttle_2 = -35.0;
+        if (throttle_2 >  35.0) throttle_2 =  35.0;
+
+        if (throttle_3 < -35.0) throttle_3 = -35.0;
+        if (throttle_3 >  35.0) throttle_3 =  35.0;
+
+        if (throttle_4 < -35.0) throttle_4 = -35.0;
+        if (throttle_4 >  35.0) throttle_4 =  35.0;
+
+        if (throttle_5 < -35.0) throttle_5 = -35.0;
+        if (throttle_5 >  35.0) throttle_5 =  35.0;
 
 }
 
@@ -601,7 +628,7 @@ AUVControl::depth_estimate(float dt)
     _pressure_zero_level += pressure_zero_level_rate*dt;
     float pressure_zero_level = _pressure_zero_level;
 
-    if ((_printing_time%10 ==0)) {    
+    if ((_printing_time%100 ==0) && false) {    
         //PX4_INFO("Debug control _________________ lamp: %1.6f ", (double)_v_rates_sp.yaw );  
         PX4_INFO("Debug pressure_zero_level: %6.1f ", (double)pressure_zero_level); 
     }
@@ -649,7 +676,7 @@ void AUVControl::control_lamp(float dt)
 
   bool print_in_control_lamp = true;
 
-  if ((_printing_time%10 ==0)&&(print_in_control_lamp)) {    
+  if ((_printing_time%100 ==0)&&(print_in_control_lamp)) {    
         //PX4_INFO("Debug control _________________ lamp: %1.6f ", (double)_v_rates_sp.yaw );  
         //PX4_INFO("Debug lamp intensity pwm: %1.6d ", _lamp_intensity_pwm); 
     }
@@ -712,13 +739,13 @@ AUVControl::control_depth(float dt)
 	//Update reference depth value
 	_zr += _vzr*dt;  
 
-    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {    
+    if ((_printing_time%100 ==0)&&(print_in_control_depth)) {    
         PX4_INFO("Debug _zr _vzr: %1.6f  %1.6f ", (double)_zr , (double)_vzr );   
     }
 
     //
     float depth_top = 0.1;
-    float depth_bottom = 1.0;
+    float depth_bottom = 5.0;
 
 	//limit min and max depth 
 	if (_zr <= depth_top){
@@ -731,7 +758,7 @@ AUVControl::control_depth(float dt)
 		_vzr = (float) 0.0;
 	}
 
-    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {   
+    if ((_printing_time%100 ==0)&&(print_in_control_depth)) {   
         PX4_INFO("Debug depth input: _zr  _vzr  dt: %1.6f  %1.6f  %1.6f", (double)_zr, (double)_vzr, (double)dt);
     }
     
@@ -785,7 +812,7 @@ AUVControl::control_depth(float dt)
     Vector<3> gamma = R_hat * e3;
 
     //lhnguyen debugging print
-    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {
+    if ((_printing_time%100 ==0)&&(print_in_control_depth)) {
         PX4_INFO("Debug depth gamma: %1.6f  %1.6f  %1.6f", (double)gamma(0), (double)gamma(1), (double)gamma(2));
     }
        
@@ -803,7 +830,7 @@ AUVControl::control_depth(float dt)
     float omega_3  = _v_att.yawspeed;
 
     //lhnguyen debugging print
-    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {
+    if ((_printing_time%100 ==0)&&(print_in_control_depth)) {
         PX4_INFO("Debug depth omega: %1.6f  %1.6f  %1.6f", (double)omega_1, (double)omega_2, (double)omega_3);
     }
 
@@ -817,7 +844,7 @@ AUVControl::control_depth(float dt)
     float v_depth_B = (float)_v_depth_estimated + temp_A*L_P1B  + temp_C*d_PP1; //AUV depth velocity measured at the centre of boyancy
 
     //lhnguyen debugging print
-    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {
+    if ((_printing_time%100 ==0)&&(print_in_control_depth)) {
         PX4_INFO("Debug depth depthB v_depth_B: %1.6f  %1.6f ", (double)depth_B, (double)v_depth_B);
     }
 
@@ -860,7 +887,7 @@ AUVControl::control_depth(float dt)
     _z_depth = satFunction(_z_depth, 5.0f); //For safety, not growing too much
 
 
-    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {    
+    if ((_printing_time%100 ==0)&&(print_in_control_depth)) {    
         PX4_INFO("Debug _z_depth  z_depth_dot: %1.6f  %1.6f ", (double)_z_depth , (double)z_depth_dot );   
     }
 
@@ -872,7 +899,7 @@ AUVControl::control_depth(float dt)
 
 
     //lhnguyen debugging print
-    if ((_printing_time%10 ==0)&&(print_in_control_depth)) {
+    if ((_printing_time%100 ==0)&&(print_in_control_depth)) {
         PX4_INFO("Debug Fc_body: %1.6f  %1.6f  %1.6f", (double)Fc_body(0), (double)Fc_body(1), (double)Fc_body(2));
     }
  
@@ -931,7 +958,7 @@ AUVControl::control_att(float dt)
 
     orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
     orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
-    if (_printing_time%10 ==0) {
+    if ((_printing_time%100 ==0) && false) {
 
         //                                           NED                   0.5                  0.6                      0.7
         PX4_INFO("Debug att force_setpoint: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
@@ -1031,7 +1058,7 @@ AUVControl::control_att(float dt)
 	*/
 	
   _Fcx_att = 10.0f*joystick_deadband(_v_rates_sp.thrust ,0.2);
-  if (_printing_time%10 ==0) {    
+  if ((_printing_time%100 ==0) && false) {    
     PX4_INFO("Debug throttle: %1.6f ", (double)_Fcx_att );
   }
 
@@ -1047,6 +1074,12 @@ AUVControl::control_att(float dt)
 	//K(0, 0) = k2;  K(1, 1) = k2;   K(2, 2) = 1.5f;
 
 
+  //Vector<3>  G_feedforward;  
+  //G_feedforward = (J*Omega) % Omega_d - J*Omega_d_dot; 
+
+  //Matrix<3, 3> K_Omega; 
+  //K_Omega(0, 0) = 3.0f*0.3105f;  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
+  //K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 
 	Vector<3> Omega_d;
 	//In order: Vector and then scalar value, for multiplication 
 	Omega_d = (gamma_d % gamma) * k1 + gamma_d *  omega_d;
@@ -1084,8 +1117,15 @@ AUVControl::control_att(float dt)
 	
   // Use the filtered one from vehicle_attitude messag_Omegae!!!
   Vector<3> Omega(_v_att.rollspeed, _v_att.pitchspeed, _v_att.yawspeed); //lhnguyen debug_Omega ???
+  if ((_printing_time%100 ==0) && false){
+    PX4_INFO("roll pitch yaw speed in manual: %1.6f %1.6f %1.6f ", (double)_v_att.rollspeed, (double)_v_att.pitchspeed, (double)_v_att.yawspeed);
+  }
+  
 
 	Vector<3> Omega_tilde = Omega - Omega_d; 
+  if ((_printing_time%100 ==0) && false){
+    PX4_INFO("omega_tilde in manual: %1.6f %1.6f %1.6f ", (double)Omega_tilde(0), (double)Omega_tilde(1), (double)Omega_tilde(2));
+  }
 
 
 	//Vector<3> JOmega = J*Omega;
@@ -1108,13 +1148,17 @@ AUVControl::control_att(float dt)
   //Anti wind-up integrator
   Vector<3> z_omega_dot = (- _z_omega  + sat3Function (_z_omega + Omega_tilde, 0.8f) ) *2.0f ;
 
+  if ((_printing_time%100 ==0) && false) {    
+    PX4_INFO("dt %1.6f", (double)dt); 
+  }
   _z_omega     += z_omega_dot*dt;   
+
   //Need to verify if it is two big that leads to over memory capability
   _z_omega = sat3Function(_z_omega, 20.0f);
 
-  if (_printing_time%10 ==0) {
+  if ((_printing_time%100 ==0) && false) {
     //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f %2d ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) , sizeof(int));
-    //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) );
+    PX4_INFO("_z_omega: %1.6f %1.6f %1.6f ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) );
   }
   
 
@@ -1157,7 +1201,7 @@ AUVControl::control_att(float dt)
   _Delta_G_hat = sat3Function(_Delta_G_hat, 0.8);  //To prevent increasing too big!!!
 
   Vector<3> Gamma_C;
-  Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - _z_omega*Ki_Omega - G_feedforward - _Delta_G_hat*0.0f; //Multiplication to 0.0f in case without current, for debugging
+  Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - _z_omega*Ki_Omega*1.0f - G_feedforward - _Delta_G_hat*0.0f; //Multiplication to 0.0f in case without current, for debugging
 	
 	//_Gamma_c_x = Gamma_C(0);
 	//_Gamma_c_y = Gamma_C(1);
@@ -1256,7 +1300,7 @@ void AUVControl::inner_loop_control(float dt)
 
 
   Vector<3> Omega_d(0.0f, 0.0f, 0.0f);;
-  float k1 = 0.3f;
+  float k1 = 0.7f;
   Omega_d = (e3 % gamma)* k1 + e3*omega_3r;
 
   //Vector<3> Omega(0.0f, 0.0f, 0.0f);   //Should read from sensor??
@@ -1265,7 +1309,11 @@ void AUVControl::inner_loop_control(float dt)
   
   // Use the filtered one from vehicle_attitude message!!!
   Vector<3> Omega(_v_att.rollspeed, _v_att.pitchspeed, _v_att.yawspeed); //lhnguyen debug_Omega??
-Omega
+  if ((_printing_time%100 ==0) && false) {
+    
+    PX4_INFO("roll pitch yaw speed: %1.6f %1.6f %1.6f ", (double)_v_att.rollspeed, (double)_v_att.pitchspeed, (double)_v_att.yawspeed);
+  }
+
 
 
   Vector<3> Omega_d_dot(0.0f, 0.0f, 0.0f); 
@@ -1281,7 +1329,7 @@ Omega
   //For New-BlueROV1, total innertial
   J(0, 0) = 0.3105f;  J(0, 1) = 0.0000f;   J(0, 2) = 0.0000f;
   J(1, 0) = 0.0000f;  J(1, 1) = 0.8486f;   J(1, 2) = 0.0000f;
-  J(2, 0) = 0.0000f;  J(2, 1) = 0.0000f;   J(2, 2) = 0.7176f;
+  J(2, 0) = 0.0000f;  J(2, 1) = 0.0000f;   J(2, 2) = 1.0f; //0.7176f;
 
 
   Matrix<3, 3> J_inverted;
@@ -1300,13 +1348,13 @@ Omega
 
 
   //Anti wind-up integrator
-  Vector<3> z_omega_dot = (- _z_omega  + sat3Function (_z_omega + Omega_tilde, 0.8f) ) *2.0f ;
+  Vector<3> z_omega_dot = (- _z_omega  + sat3Function (_z_omega + Omega_tilde/2.0f, 0.8f) ) *2.0f;
 
   _z_omega     += z_omega_dot*dt;   
   //Need to verify if it is two big that leads to over memory capability
   _z_omega = sat3Function(_z_omega, 20.0f);
 
-  if (_printing_time%10 ==0) {
+  if ((_printing_time%100 ==0) && false) {
     //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f %2d ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) , sizeof(int));
     //PX4_INFO("_z_omega: %1.6f %1.6f %1.6f ", (double)_z_omega(0), (double)_z_omega(1), (double)_z_omega(2) );
   }
@@ -1315,13 +1363,20 @@ Omega
   G_feedforward = (J*Omega) % Omega_d - J*Omega_d_dot; 
 
   Matrix<3, 3> K_Omega; 
-  K_Omega(0, 0) = 1.0f*3.0f*0.3105f;  K_Omega(0, 1) = 0.0000f;             K_Omega(0, 2) = 0.0000f;
-  K_Omega(1, 0) = 0.0000f;            K_Omega(1, 1) = 1.0f*3.0f*0.8486f;   K_Omega(1, 2) = 0.0000f;
-  K_Omega(2, 0) = 0.0000f;            K_Omega(2, 1) = 0.0000f;             K_Omega(2, 2) = 3.0f*0.7176f;
+  K_Omega(0, 0) = 3.0f*J(0, 0);  K_Omega(0, 1) = 0.0000f;        K_Omega(0, 2) = 0.0000f;
+  K_Omega(1, 0) = 0.0000f;       K_Omega(1, 1) = 3.0f*J(1, 1);   K_Omega(1, 2) = 0.0000f;
+  K_Omega(2, 0) = 0.0000f;       K_Omega(2, 1) = 0.0000f;        K_Omega(2, 2) = 5.0f*J(2, 2);
 
-  float Ki_Omega = 6.0;
+  //float Ki_Omega = 0.4f;
 
-  float eta3 = 8.0;
+  Matrix<3, 3> Ki_Omega; 
+  Ki_Omega(0, 0) = 0.1f*K_Omega(0, 0);  Ki_Omega(0, 1) = 0.0000f;              Ki_Omega(0, 2) = 0.0000f;
+  Ki_Omega(1, 0) = 0.0000f;             Ki_Omega(1, 1) = 0.1f*K_Omega(1, 1);   Ki_Omega(1, 2) = 0.0000f;
+  Ki_Omega(2, 0) = 0.0000f;             Ki_Omega(2, 1) = 0.0000f;              Ki_Omega(2, 2) = 0.04f*K_Omega(2, 2);
+
+
+
+  float eta3 = 6.0;
   
   Vector<3> Gg;  
   Gg = (e3 % gamma) * 14.2*9.81*0.1;  //m*g*l e3 x RT e3
@@ -1349,7 +1404,8 @@ Omega
   _Delta_G_hat = sat3Function(_Delta_G_hat, 0.8);  //To prevent increasing too big!!!
 
   Vector<3> Gamma_C;
-  Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - _z_omega*Ki_Omega - G_feedforward - _Delta_G_hat*0.0f; //Multiplication to 0.0f in case without current, for debugging
+  Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - Ki_Omega*_z_omega*1.0f - G_feedforward - _Delta_G_hat*0.0f; //Multiplication to 0.0f in case without current, for debugging
+  //Gamma_C = -sat3Function(K_Omega*Omega_tilde, eta3) - Ki_Omega*_z_omega**1.0f - G_feedforward - _Delta_G_hat*0.0f; //Multiplication to 0.0f in case without current, for debugging
   
   //_Gamma_c_x = Gamma_C(0);
   //_Gamma_c_y = Gamma_C(1);
@@ -1359,7 +1415,7 @@ Omega
   _Gamma_c_y_inner = 1.0f*Gamma_C(1);
   _Gamma_c_z_inner = Gamma_C(2);
 
-   if (_printing_time%10 ==0) {
+   if ((_printing_time%100 ==0) && false) {
     PX4_INFO("omge3r   omega 3r dot: %1.6f %1.6f ", (double)omega_3r, (double)dot_omega_3r);
     PX4_INFO("Gamma C: %1.6f %1.6f %1.6f ", (double)_Gamma_c_x_inner, (double) _Gamma_c_y_inner, (double) Gamma_C(2) );
   }
@@ -1509,7 +1565,7 @@ AUVControl::task_main()
         
       orb_copy(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, &_v_rates_sp);
 
-      if (_printing_time%10 ==0) {
+      if ((_printing_time%100 ==0) && false) {
         PX4_INFO("Debug emmergency %1.1f", (double)_v_rates_sp.roll); 
       }  
 
@@ -1585,6 +1641,8 @@ AUVControl::task_main()
             float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
             last_run = hrt_absolute_time();
 
+            
+
 
         //Lamp control
         if (true){
@@ -1594,7 +1652,7 @@ AUVControl::task_main()
        
 
         //Check if it is Manual control mode?
-        if (_printing_time%10 ==0) {
+        if ((_printing_time%100 ==0) && false) {
           //PX4_INFO("Debug pitch %1.1f", (double)_v_rates_sp.pitch); 
         }
         if (abs(_v_rates_sp.pitch) > 0.5f) {
@@ -1605,10 +1663,10 @@ AUVControl::task_main()
 
         float he_so_giam = 0.7f; 
 
-        if (_isManualMode){
-        
+        if (_isManualMode){ 
+            
 
-            if (_printing_time%10 ==0) {    
+            if ((_printing_time%100 ==0) && true) {    
               PX4_INFO("In manual mode"); 
             }
 
@@ -1661,6 +1719,15 @@ AUVControl::task_main()
 
             */
 
+            if (!_isStartedIntegratorInManualControl){
+              _z_depth = 0.0f;
+              _z_omega(0) = 0.0f;     _z_omega(1) = 0.0f;     _z_omega(2) = 0.0f; 
+              _Omega_hat(0) = 0.0f;   _Omega_hat(1) = 0.0f;   _Omega_hat(2) = 0.0f; 
+              _Delta_G_hat(0) = 0.0f; _Delta_G_hat(1) = 0.0f; _Delta_G_hat(2) = 0.0f;    
+              _isStartedIntegratorInManualControl = true;
+            }
+
+
         		//Depth control, calculate _Fcz
         		control_depth(dt);
         		//PX4_INFO("Debug depth: %1.6f  %1.6f ", (double)_zr, (double)_vzr);
@@ -1693,11 +1760,14 @@ AUVControl::task_main()
             _Gcz_man =  1.0f*_Gamma_c_z_depth + 1.0f*_Gamma_c_z_att;   
             */                                                          
       			
-            _changeStateManual2Auto = 0;		
+            _changeStateManual2Auto = 0;	
+            _isStartedIntegratorInInnerLoop = false;
+
+            
     		} 
         else
         {
-          if (_printing_time%10 ==0) {    
+          if ((_printing_time%100 ==0) && true) {    
               PX4_INFO("In Autonomous control mode"); 
             }
 
@@ -1717,7 +1787,7 @@ AUVControl::task_main()
             orb_copy(ORB_ID(vehicle_force_setpoint), _v_force_sp_sub, &_v_force_sp);
             orb_copy(ORB_ID(position_setpoint), _position_sp_sub, &_position_sp);
 
-            if (_printing_time%10 ==0) {
+            if (_printing_time%100 ==0) {
 
               //                                           NED                   0.5                  0.6                      0.7
               //PX4_INFO("Debug force_setpoint force: %1.6f  %1.6f  %1.6f", (double)_v_force_sp.x , (double)_v_force_sp.y , (double)_v_force_sp.z );
@@ -1732,6 +1802,14 @@ AUVControl::task_main()
             float dt = (hrt_absolute_time() - last_run) / 1000000.0f;
             last_run = hrt_absolute_time();
             */
+
+            if (!_isStartedIntegratorInInnerLoop){
+                _z_omega(0) = 0.0f;     _z_omega(1) = 0.0f;     _z_omega(2) = 0.0f; 
+                _Omega_hat(0) = 0.0f;   _Omega_hat(1) = 0.0f;   _Omega_hat(2) = 0.0f; 
+                _Delta_G_hat(0) = 0.0f; _Delta_G_hat(1) = 0.0f; _Delta_G_hat(2) = 0.0f;    
+                _isStartedIntegratorInInnerLoop = true;
+            }
+
 
             inner_loop_control(dt);
 
@@ -1765,9 +1843,16 @@ AUVControl::task_main()
               Moment[1] =  _Gamma_c_y_inner;   
               Moment[2] =  _Gamma_c_z_inner;
             }
-
-
             /*
+             Force[0]  =  0.0f;
+              Force[1]  =  0.0f;
+              Force[2]  =  0.0f;           
+              Moment[0] =  0.0f;
+              Moment[1] =  0.0f;   
+              Moment[2] =  0.0f;
+              */
+
+            
             _Fcx_auto  =  _v_force_sp.x;
             _Fcy_auto  =  _v_force_sp.y;
             _Fcz_auto  =  _v_force_sp.z;
@@ -1776,9 +1861,11 @@ AUVControl::task_main()
             _Gcx_auto =  _Gamma_c_x_inner;
             _Gcy_auto =  _Gamma_c_y_inner;   
             _Gcz_auto =  _Gamma_c_z_inner;
-            */
+            
 
             _changeStateManual2Auto += 1;
+
+            _isStartedIntegratorInManualControl =false;
         }
 
         /*
@@ -1795,6 +1882,18 @@ AUVControl::task_main()
 
     		//Calculate throttle (in N) of motors with given Force (N) and Moment (N.m)
     		ForceMoment2Throttle(Force, Moment, throttle[0], throttle[1], throttle[2], throttle[3], throttle[4], throttle[5]);
+
+        /*optical_flow_p_sp.pixel_flow_x_integral  =           Moment[0];          
+        _optical_flow_p_sp.pixel_flow_y_integral  =     -1.0*Moment[1];
+        _optical_flow_p_sp.gyro_x_rate_integral =             Moment[2];
+        _optical_flow_p_sp.gyro_y_rate_integral =       0.0; //-1.0f*_v_att_sp.q_d[3];
+  
+        _optical_flow_p_sp.timestamp = hrt_absolute_time();         
+        orb_publish(ORB_ID(optical_flow), _optical_flow_p_pub, &_optical_flow_p_sp);
+        */
+        if ((_printing_time%100 ==0) && false) {
+          PX4_INFO("roll pitch yaw moment: %1.6f %1.6f %1.6f ", (double)Moment[0], (double)Moment[1], (double)Moment[2]);
+        }
 
     		/*
     		//Output to thrusters 
